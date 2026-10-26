@@ -184,7 +184,7 @@ function renderChats(){
     row.innerHTML=`${avatarHTML(c)}
       <div class="chat-mid">
         <div class="chat-name">${esc(c.name)} ${c.verified?'<span class="vtag">TEAM</span>':''}${c.idChanged?'<span class="vtag" style="color:var(--ember);border-color:rgba(228,87,63,.45)">ID CHANGED</span>':''}</div>
-        <div class="chat-last">${esc(maskingOn()?maskSensitive(lastMsgPreview(ch.msgs)):lastMsgPreview(ch.msgs))}</div>
+        <div class="chat-last">${esc(lastMsgPreview(ch.msgs))}</div>
       </div>
       <div class="chat-side">
         <div class="chat-time">${last?fmtTime(last.ts):''}</div>
@@ -544,7 +544,7 @@ function msgHTML(m,c){
   if(m.replyTo) inner+=`<div class="quote"><b>${m.replyTo.from==='me'?'You':esc(c.name)}</b>${esc(m.replyTo.text)}</div>`;
   if(m.kind==='img') inner+=`<img src="${m.img}" alt="photo">`;
   if(m.kind==='voice') inner+=voiceBubbleHTML(m);
-  if(m.text) inner+=esc(maskingOn()?maskSensitive(m.text):m.text);
+  if(m.text) inner+=esc(m.text);
   const burnCls=m.burn?' burnable':'';
   const burnBar=m.burn&&m.revealed?`<div class="burn-bar"><i style="animation:burnbar ${BURN_VIEW_S}s linear forwards"></i></div>`:'';
   const reacts=reactionChips(m);

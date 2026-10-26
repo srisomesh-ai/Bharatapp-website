@@ -25,7 +25,6 @@ function openSettings(){
 
     <h3>Privacy</h3>
     <div class="pcard">
-      <div class="prow"><span class="k">Mask phone numbers &amp; emails in chats</span>${toggle('set_mask',S.set?.noMask!==true)}</div>
       <div class="prow"><span class="k">Block screenshots app-wide <span class="muted" style="font-size:11px">(app only)</span></span>${toggle('set_secureAll',S.set?.secureAll===true)}</div>
       <div class="prow"><span class="k">Read receipts</span>${toggle('set_readReceipts',S.set?.readReceipts!==false)}</div>
       <div class="prow"><span class="k">Show last seen</span>${toggle('set_lastSeen',S.set?.lastSeen!==false)}</div>
@@ -73,8 +72,7 @@ function flipToggle(id){
   S.set=S.set||{};
   const nowOn=!$(id).classList.contains('on');
   $(id).classList.toggle('on');
-  if(key==='mask'){ S.set.noMask=!nowOn; }   // toggle ON = masking ON = noMask false
-  else { S.set[key]=nowOn; }
+  S.set[key]=nowOn;
   save();
   if(key==='secureAll'){ if(nowOn){secureOn();toast('Screenshots blocked app-wide (in the app)');} else {secureOff();toast('App-wide block off — status stays protected');} return; }
   toast('Saved');

@@ -33,7 +33,7 @@ function notifyIncoming(c,m){
   // browser notification (web, when tab not focused)
   try{
     if(document.hidden && 'Notification' in window && Notification.permission==='granted'){
-      const body = m.kind==='text' ? (maskingOn()?maskSensitive(m.text):m.text)
+      const body = m.kind==='text' ? m.text
                  : (m.kind==='voice'?'🎙 Voice message':(m.kind==='img'?'🖼 Photo':'New message'));
       const n=new Notification((c.name||'Kalisi'), {body, icon:'/icon-192.png', tag:c.id});
       n.onclick=()=>{ window.focus(); openChat(c.id); n.close(); };
