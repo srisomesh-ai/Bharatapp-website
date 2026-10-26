@@ -102,6 +102,9 @@
 .react-emoji:active{transform:scale(1.3);background:var(--panel2)}
 /* Reactions float outside the bubble as a tag (WhatsApp/iMessage style) */
 .bub-wrap{position:relative;display:inline-flex;flex-direction:column;max-width:78%}
+/* the wrapper already caps the width — a second 78% here squeezed short
+   messages down to one word (or one digit) per line */
+.bub-wrap .bub{max-width:100%;overflow-wrap:anywhere}
 .brow.mine .bub-wrap{align-items:flex-end}
 .brow.theirs .bub-wrap{align-items:flex-start}
 .msg-reacts{position:absolute;bottom:-13px;display:flex;gap:3px;z-index:3}
