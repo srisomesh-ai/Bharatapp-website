@@ -180,7 +180,7 @@ function renderChats(){
   if(!rows.length){list.innerHTML=`<div class="empty"><b>No chats yet.</b><br>Go to <b>Connect</b> to add a friend by QR or Kalisi ID.</div>`;return;}
   for(const {c,ch} of rows){
     const last=ch.msgs.at(-1);
-    const row=document.createElement('div'); row.className='chat-row';
+    const row=document.createElement('div'); row.className='chat-row'+(c.id===curChat?' active':'');
     row.innerHTML=`${avatarHTML(c)}
       <div class="chat-mid">
         <div class="chat-name">${esc(c.name)} ${c.verified?'<span class="vtag">TEAM</span>':''}${c.idChanged?'<span class="vtag" style="color:var(--ember);border-color:rgba(228,87,63,.45)">ID CHANGED</span>':''}</div>
@@ -429,6 +429,7 @@ function openChat(cid){
   // header menu button
   const hm=$('chat-header-menu'); if(hm)hm.onclick=()=>openChatMenu(cid);
   $('scr-main').classList.remove('on'); $('scr-chat').classList.add('on');
+  renderChats();   // highlight the open chat in the side list (PC layout)
   renderMsgs(true);
 }
 function setSub(txt,typing){

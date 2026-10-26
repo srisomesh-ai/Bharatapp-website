@@ -227,3 +227,28 @@
 
 /* Reaction chips: little pop */
 
+
+/* ============ Desktop (PC browser): full window, chats left + chat right ============ */
+#desk-empty{display:none}
+@media (min-width:900px){
+  body{background:var(--bg)}
+  #phone,:root[data-theme=light] #phone{max-width:none;box-shadow:none}
+  /* landing + sign-up use the full window; their content stays a readable width */
+  #scr-onboard>*{width:100%;max-width:480px;margin-left:auto;margin-right:auto}
+
+  /* once signed in, the list and the open chat sit side by side */
+  #phone:has(#scr-main.on) #scr-main,
+  #phone:has(#scr-chat.on) #scr-main{display:flex;right:auto;width:380px;border-right:1px solid var(--line)}
+  #scr-chat{left:380px}
+  #phone:has(#scr-main.on) #desk-empty{display:flex;position:absolute;inset:0 0 0 380px;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;color:var(--faint);font-size:14px;line-height:1.5;padding:40px}
+  #desk-empty img{width:88px;height:88px;border-radius:22px}
+  #desk-empty b{color:var(--text);font-family:var(--disp);font-size:22px;font-weight:700}
+  #scr-chat #chat-top .icon-btn:first-child{display:none}   /* no "back" — the list is right there */
+  .chat-row{cursor:pointer}
+  .chat-row:hover{background:var(--panel)}
+  .chat-row.active{background:var(--panel2)}
+
+  /* bottom sheets become centred dialogs instead of full-width drawers */
+  .sheet{left:50%;right:auto;width:520px;bottom:50%;border-radius:20px;transform:translate(-50%,calc(50% + 100vh))}
+  .sheet.on{transform:translate(-50%,50%)}
+}
