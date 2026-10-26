@@ -93,11 +93,12 @@ tr:last-child td{border-bottom:none}
     <div class="tabs">
       <button class="tabb on" id="tab-users" onclick="showTab('users')">Users</button>
       <button class="tabb" id="tab-groups" onclick="showTab('groups')">Groups</button>
+      <button class="tabb" id="tab-trace" onclick="showTab('trace')">Trace forward</button>
     </div>
 
     <div id="view-users">
       <div class="toolbar">
-        <input type="search" id="search" placeholder="Search @username, name or KAL-ID…" oninput="renderUsers()">
+        <input type="search" id="search" placeholder="Search @username, name, KAL-ID or email…" oninput="renderUsers()">
       </div>
       <table>
         <thead><tr><th>User</th><th class="hide-sm">KAL-ID</th><th>Status</th><th class="hide-sm">Last seen</th><th>Actions</th></tr></thead>
@@ -110,6 +111,13 @@ tr:last-child td{border-bottom:none}
         <thead><tr><th>Group</th><th class="hide-sm">GID</th><th>Members</th><th class="hide-sm">Created</th></tr></thead>
         <tbody id="groups-body"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
+    </div>
+
+    <div id="view-trace" style="display:none">
+      <p class="muted" style="margin:4px 0 10px">Use only on a lawful order. Paste the exact forwarded text, or its 64-character fingerprint. Kalisi never sees message content — only fingerprints of forwarded messages are kept.</p>
+      <textarea id="trace-in" rows="4" style="width:100%;box-sizing:border-box;border-radius:11px;padding:10px;font:inherit" placeholder="Forwarded message text or fingerprint"></textarea>
+      <button class="btn" style="margin:10px 0" onclick="doTrace()">Find originator</button>
+      <div id="trace-out"></div>
     </div>
   </div>
 </div>
@@ -169,11 +177,11 @@ function fmt(d){ if(!d)return '—'; const t=new Date(d.replace(' ','T')); const
 
 function renderUsers(){
   const q=($('search').value||'').toLowerCase();
-  const rows=USERS.filter(u=>!q||(u.username||'').toLowerCase().includes(q)||(u.name||'').toLowerCase().includes(q)||u.kal_id.toLowerCase().includes(q));
+  const rows=USERS.filter(u=>!q||(u.username||'').toLowerCase().includes(q)||(u.name||'').toLowerCase().includes(q)||u.kal_id.toLowerCase().includes(q)||(u.email||'').toLowerCase().includes(q));
   if(!rows.length){$('users-body').innerHTML='<tr><td colspan="5" class="empty">No users found</td></tr>';return;}
   $('users-body').innerHTML=rows.map(u=>`
     <tr>
-      <td><div class="uname">${u.username?'@'+esc(u.username):'<span class="muted">(no username)</span>'}</div><div class="muted">${esc(u.name)}</div></td>
+      <td><div class="uname">${u.username?'@'+esc(u.username):'<span class="muted">(no username)</span>'}</div><div class="muted">${esc(u.name)}</div>${u.email?`<div class="muted">${esc(u.email)}</div>`:''}</td>
       <td class="hide-sm uid">${esc(u.kal_id)}</td>
       <td>${u.disabled?'<span class="pill off">Disabled</span>':'<span class="pill on">Active</span>'}</td>
       <td class="hide-sm muted">${fmt(u.last_seen)}</td>
@@ -207,8 +215,22 @@ async function loadStatsOnly(){ try{ const s=await call('stats',{}); const st=s.
   $('stats').innerHTML=[['Total users',st.users],['Active (7d)',st.active7d],['Disabled',st.disabled],['Queued msgs',st.queued],['Groups',st.groups]]
     .map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join(''); }catch(e){} }
 function showTab(t){
-  $('tab-users').classList.toggle('on',t==='users'); $('tab-groups').classList.toggle('on',t==='groups');
-  $('view-users').style.display=t==='users'?'block':'none'; $('view-groups').style.display=t==='groups'?'block':'none';
+  for(const k of ['users','groups','trace']){
+    $('tab-'+k).classList.toggle('on',t===k); $('view-'+k).style.display=t===k?'block':'none';
+  }
+}
+async function doTrace(){
+  const v=$('trace-in').value; if(!v.trim()){toast('Paste the text or fingerprint');return;}
+  const body=/^\s*[a-f0-9]{64}\s*$/i.test(v)?{hash:v.trim()}:{text:v};
+  try{
+    const r=await call('trace',body);
+    const who=o=>o?`${o.username?'@'+esc(o.username):'(no username)'} · <span class="uid">${esc(o.kal_id)}</span> · ${esc(o.email||'no email on file')}`:'';
+    $('trace-out').innerHTML=`<div class="muted uid" style="margin-bottom:8px">${esc(r.hash)}</div>`+
+      (r.origin?`<p><b>Earliest known originator:</b> ${who(r.origin)}</p>`:'<p class="muted">No forwards of this message on record.</p>')+
+      (r.forwards.length?`<table><thead><tr><th>When</th><th>Forwarded by</th><th class="hide-sm">Got it from</th></tr></thead><tbody>`+
+        r.forwards.map(f=>`<tr><td class="muted">${esc(f.created_at)}</td><td>${f.username?'@'+esc(f.username):esc(f.kal_id)}<div class="muted">${esc(f.email||'')}</div></td><td class="hide-sm">${f.received_from?(f.from_username?'@'+esc(f.from_username):esc(f.received_from)):'<span class="muted">their own message</span>'}</td></tr>`).join('')+
+        '</tbody></table>':'');
+  }catch(e){ toast(e.message); }
 }
 $('a-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 if(TOKEN) enterPanel();

@@ -25,6 +25,7 @@ $action = $in['action'] ?? ($_GET['action'] ?? '');
 
 try {
   switch ($action) {
+    case 'email_otp_send': emailOtpSend($pdo, $in); break;
     case 'register':  register($pdo, $in); break;
     case 'lookup':    lookup($pdo, $in); break;
     case 'send':      send($pdo, $in); break;
@@ -71,6 +72,10 @@ function register(PDO $pdo, array $in): void {
   $pubkey = $in['pubkey'] ?? null; // JWK (public only)
   if ($name === '' || mb_strlen($name) > 24 || !is_array($pubkey)) out(false, ['error' => 'bad_input']);
   if (!preg_match('/^[a-z0-9_]{3,20}$/', $username)) out(false, ['error' => 'bad_username']);
+  // Every new account is tied to a verified Gmail address. It is kept on the
+  // server only — lookups, profiles and contacts never return it. A persona
+  // made from an account that is already signed in takes that account's email.
+  $email = registrationEmail($pdo, $in);
   $st = $pdo->prepare('SELECT kal_id, last_seen FROM k_users WHERE username = ?'); $st->execute([$username]);
   if ($ex = $st->fetch()) {
     if (strtotime($ex['last_seen']) < time() - 90*86400) {
@@ -100,12 +105,16 @@ function register(PDO $pdo, array $in): void {
     $kid = kalId();
     try {
       if ($verifier !== '') {
-        $st = $pdo->prepare('INSERT INTO k_users (kal_id, username, name, pubkey, token, verifier, salt, created_at, last_seen) VALUES (?,?,?,?,?,?,?,NOW(),NOW())');
-        $st->execute([$kid, $username, $name, json_encode($pubkey), $token,
+        $st = $pdo->prepare('INSERT INTO k_users (kal_id, username, name, pubkey, token, email, verifier, salt, created_at, last_seen) VALUES (?,?,?,?,?,?,?,?,NOW(),NOW())');
+        $st->execute([$kid, $username, $name, json_encode($pubkey), $token, $email,
                       password_hash($verifier, PASSWORD_DEFAULT), $salt]);
       } else {
-        $st = $pdo->prepare('INSERT INTO k_users (kal_id, username, name, pubkey, token, created_at, last_seen) VALUES (?,?,?,?,?,NOW(),NOW())');
-        $st->execute([$kid, $username, $name, json_encode($pubkey), $token]);
+        $st = $pdo->prepare('INSERT INTO k_users (kal_id, username, name, pubkey, token, email, created_at, last_seen) VALUES (?,?,?,?,?,?,NOW(),NOW())');
+        $st->execute([$kid, $username, $name, json_encode($pubkey), $token, $email]);
+      }
+      // the code has done its job — it can't be used for a second account
+      if ($email !== null && !empty($in['email_code'])) {
+        $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$email]);
       }
       out(true, ['kal_id' => $kid, 'username' => $username, 'token' => $token]);
     } catch (PDOException $e) { /* duplicate id, retry */ }
@@ -154,6 +163,7 @@ function send(PDO $pdo, array $in): void {
   if (!$rel || $rel['status'] !== 'accepted') out(false, ['error' => 'not_connected']);
   $st = $pdo->prepare('INSERT INTO k_queue (to_id, from_id, client_id, iv, payload, created_at) VALUES (?,?,?,?,?,NOW())');
   $st->execute([$to, $me['kal_id'], $cid, $iv, $blob]);
+  logForward($pdo, $in, $me['kal_id']);
   // best-effort push (content stays private — generic text only)
   $sname = '';
   $us = $pdo->prepare('SELECT username FROM k_users WHERE kal_id=?'); $us->execute([$me['kal_id']]);
@@ -296,6 +306,128 @@ function recoverLogin(PDO $pdo, array $in): void {
     'name'     => $r['name'],
     'token'    => $token,
   ]);
+}
+
+/* ---------------- Gmail verification ---------------- */
+
+/* Gmail only. Gmail ignores dots and anything after '+' in the name, so we
+   store the canonical form — one inbox, one address, however it was typed. */
+function normalizeGmail(string $raw): ?string {
+  $e = strtolower(trim($raw));
+  if (!preg_match('/^([a-z0-9.+_-]{1,64})@(gmail\.com|googlemail\.com)$/', $e, $m)) return null;
+  $local = explode('+', $m[1], 2)[0];
+  $local = str_replace('.', '', $local);
+  if (!preg_match('/^[a-z0-9]{6,30}$/', $local)) return null;
+  return $local . '@gmail.com';
+}
+
+function clientIp(): string {
+  return substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
+}
+
+/* Email a 6-digit code. The code is stored hashed, lives 10 minutes and
+   allows 5 tries. Sending is rate limited per address and per IP. */
+function emailOtpSend(PDO $pdo, array $in): void {
+  $email = normalizeGmail((string)($in['email'] ?? ''));
+  if ($email === null) out(false, ['error' => 'bad_email']);
+  $ip = clientIp();
+
+  $st = $pdo->prepare('SELECT MAX(created_at) AS last, COUNT(*) AS n FROM k_otp_log
+                       WHERE email = ? AND created_at > (NOW() - INTERVAL 1 HOUR)');
+  $st->execute([$email]); $r = $st->fetch();
+  if ($r['last'] && strtotime($r['last']) > time() - 60) {
+    out(false, ['error' => 'too_soon', 'wait' => 60 - (time() - strtotime($r['last']))]);
+  }
+  if ((int)$r['n'] >= 5) out(false, ['error' => 'too_many']);
+  $st = $pdo->prepare('SELECT COUNT(*) FROM k_otp_log WHERE ip = ? AND created_at > (NOW() - INTERVAL 1 HOUR)');
+  $st->execute([$ip]);
+  if ((int)$st->fetchColumn() >= 15) out(false, ['error' => 'too_many']);
+
+  $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+  $pdo->prepare('INSERT INTO k_email_otp (email, code_hash, attempts, expires_at) VALUES (?,?,0,NOW() + INTERVAL 10 MINUTE)
+                 ON DUPLICATE KEY UPDATE code_hash = VALUES(code_hash), attempts = 0, expires_at = VALUES(expires_at)')
+      ->execute([$email, password_hash($code, PASSWORD_DEFAULT)]);
+  $pdo->prepare('INSERT INTO k_otp_log (email, ip, created_at) VALUES (?,?,NOW())')->execute([$email, $ip]);
+  $pdo->exec('DELETE FROM k_otp_log WHERE created_at < (NOW() - INTERVAL 1 DAY)');
+
+  if (!sendOtpMail($email, $code)) out(false, ['error' => 'email_send_failed']);
+  out(true, ['sent' => true, 'email' => $email]);
+}
+
+function sendOtpMail(string $to, string $code): bool {
+  $from = defined('MAIL_FROM') ? MAIL_FROM : 'no-reply@kalisi.app';
+  $subject = 'Your Kalisi code: ' . $code;
+  $body = "Your Kalisi verification code is:\r\n\r\n    $code\r\n\r\n"
+        . "It expires in 10 minutes. If you didn't ask for it, ignore this email.\r\n\r\n"
+        . "Your email is never shown to your contacts.\r\n— Kalisi";
+  $headers = "From: Kalisi <$from>\r\nReply-To: support@kalisi.app\r\n"
+           . "Content-Type: text/plain; charset=utf-8\r\n";
+  try { return @mail($to, $subject, $body, $headers, '-f' . $from); }
+  catch (Throwable $e) { return false; }
+}
+
+/* Check a code without using it up (so a taken username can be retried).
+   Ends the request with an error when it doesn't match. */
+function checkEmailCode(PDO $pdo, string $email, string $code): void {
+  $st = $pdo->prepare('SELECT code_hash, attempts, expires_at FROM k_email_otp WHERE email = ?');
+  $st->execute([$email]); $r = $st->fetch();
+  if (!$r || strtotime($r['expires_at']) < time()) out(false, ['error' => 'code_expired']);
+  if ((int)$r['attempts'] >= 5) out(false, ['error' => 'too_many']);
+  usleep(200000);
+  if (!preg_match('/^\d{6}$/', $code) || !password_verify($code, $r['code_hash'])) {
+    $pdo->prepare('UPDATE k_email_otp SET attempts = attempts + 1 WHERE email = ?')->execute([$email]);
+    out(false, ['error' => 'wrong_code']);
+  }
+}
+
+/* The verified email a new account is registered under. Either a fresh
+   email + code, or an already signed-in account making another persona. */
+function registrationEmail(PDO $pdo, array $in): ?string {
+  $required = !defined('REQUIRE_EMAIL') || REQUIRE_EMAIL;
+
+  if (!empty($in['parent_kal_id']) || !empty($in['parent_token'])) {
+    $parent = auth($pdo, ['kal_id' => $in['parent_kal_id'] ?? '', 'token' => $in['parent_token'] ?? '']);
+    $st = $pdo->prepare('SELECT email FROM k_users WHERE kal_id = ?');
+    $st->execute([$parent['kal_id']]);
+    $email = $st->fetchColumn() ?: null;
+    if ($email === null && $required) out(false, ['error' => 'email_required']);
+    return $email;
+  }
+
+  $raw = (string)($in['email'] ?? '');
+  if ($raw === '') {
+    if ($required) out(false, ['error' => 'email_required']);
+    return null;
+  }
+  $email = normalizeGmail($raw);
+  if ($email === null) out(false, ['error' => 'bad_email']);
+  checkEmailCode($pdo, $email, trim((string)($in['email_code'] ?? '')));
+
+  $st = $pdo->prepare('SELECT COUNT(*) FROM k_users WHERE email = ?');
+  $st->execute([$email]);
+  if ((int)$st->fetchColumn() >= 5) out(false, ['error' => 'email_limit']);
+  return $email;
+}
+
+/* ---------------- forwarded-message tracing ----------------
+   When a message is forwarded the app sends a SHA-256 fingerprint of its
+   content (never the content) and who it got the message from. Ordinary,
+   non-forwarded messages are never fingerprinted. On a lawful order the
+   admin panel can match a fingerprint to the earliest account that put it
+   into circulation. Rows are dropped after FWD_RETENTION_DAYS. */
+function logForward(PDO $pdo, array $in, string $kalId): void {
+  $hash = strtolower((string)($in['fwd_hash'] ?? ''));
+  if (!preg_match('/^[a-f0-9]{64}$/', $hash)) return;
+  $from = strtoupper(trim((string)($in['fwd_from'] ?? '')));
+  if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $from)) $from = '';
+  try {
+    $pdo->prepare('INSERT INTO k_fwd_log (hash, kal_id, received_from, created_at) VALUES (?,?,?,NOW())')
+        ->execute([$hash, $kalId, $from]);
+    if (random_int(1, 200) === 1) {
+      $days = defined('FWD_RETENTION_DAYS') ? (int)FWD_RETENTION_DAYS : 180;
+      $pdo->prepare('DELETE FROM k_fwd_log WHERE created_at < (NOW() - INTERVAL ? DAY)')->execute([$days]);
+    }
+  } catch (Throwable $e) { /* never block a message over the log */ }
 }
 
 function changeUsername(PDO $pdo, array $in): void {
@@ -836,6 +968,7 @@ function groupSend(PDO $pdo, array $in): void {
     if ($mm === $me['kal_id']) continue;
     $ins->execute([$mm, $me['kal_id'], $cid, $iv, $blob]);
   }
+  logForward($pdo, $in, $me['kal_id']);
   out(true, ['sent' => true, 'gid' => $gid]);
 }
 
@@ -872,6 +1005,29 @@ function migrate(PDO $pdo): void {
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN username VARCHAR(20) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
   try { $pdo->exec("CREATE UNIQUE INDEX idx_username ON k_users (username)"); } catch (Throwable $e) {}
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN disabled TINYINT NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
+  try { $pdo->exec("ALTER TABLE k_users ADD COLUMN email VARCHAR(254) NULL"); } catch (Throwable $e) {}
+  try { $pdo->exec("CREATE INDEX idx_email ON k_users (email)"); } catch (Throwable $e) {}
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_email_otp (
+    email VARCHAR(254) PRIMARY KEY,
+    code_hash VARCHAR(255) NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    expires_at DATETIME NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_otp_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(254) NOT NULL,
+    ip VARCHAR(45) NOT NULL,
+    created_at DATETIME NOT NULL,
+    KEY idx_email (email), KEY idx_ip (ip)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_fwd_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    hash CHAR(64) NOT NULL,
+    kal_id VARCHAR(14) NOT NULL,
+    received_from VARCHAR(14) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    KEY idx_hash (hash), KEY idx_created (created_at)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   $pdo->exec("CREATE TABLE IF NOT EXISTS k_blocks (
     blocker VARCHAR(14) NOT NULL,
     blocked VARCHAR(14) NOT NULL,

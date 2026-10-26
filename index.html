@@ -6,6 +6,10 @@
 <meta name="theme-color" content="#0D1120">
 <title>Kalisi — Private messenger. No phone number.</title>
 <meta name="description" content="Kalisi is a private messenger with no phone number. End-to-end encrypted, data stays on your phone. Made in India.">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -89,7 +93,7 @@
       <section class="land-sec alt">
         <h2 class="land-h2">Simple to trust, simple to use</h2>
         <div class="how-steps">
-          <div class="how-step"><span class="how-n">1</span><div><b>Pick your @username</b><p>Created right on your device. No SIM, no email, no verification queues.</p></div></div>
+          <div class="how-step"><span class="how-n">1</span><div><b>Pick your @username</b><p>No SIM and no phone number. Verify a Gmail once — it stays private, contacts only ever see your @username.</p></div></div>
           <div class="how-step"><span class="how-n">2</span><div><b>Connect with people you trust</b><p>Share your username or QR. A quick request-and-accept keeps strangers out.</p></div></div>
           <div class="how-step"><span class="how-n">3</span><div><b>Talk freely</b><p>Chats, voice notes, photos and status — protected end to end, always.</p></div></div>
           <div class="how-step"><span class="how-n">4</span><div><b>Stay in control</b><p>Your chats stay on your phone. Back them up with a key only you hold.</p></div></div>
@@ -133,8 +137,19 @@
           <label for="ob-user">Choose your @username</label>
           <input id="ob-user" maxlength="20" placeholder="e.g. somu" autocomplete="off" autocapitalize="none" style="font-family:var(--mono)">
         </div>
+        <div class="field" style="margin-top:12px">
+          <label for="ob-email">Your Gmail (kept private)</label>
+          <div style="display:flex;gap:8px">
+            <input id="ob-email" type="email" maxlength="80" placeholder="you@gmail.com" autocomplete="email" autocapitalize="none">
+            <button class="btn ghost" id="ob-send-code" style="width:auto;flex:none;margin:0;padding:0 14px" onclick="obSendCode()">Send code</button>
+          </div>
+        </div>
+        <div class="field hide" id="ob-code-field" style="margin-top:12px">
+          <label for="ob-code">6-digit code from your email</label>
+          <input id="ob-code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code" style="font-family:var(--mono);letter-spacing:.3em">
+        </div>
         <button class="btn" style="margin-top:14px" onclick="obCreate()">Create my Kalisi ID</button>
-        <p class="ob-note">No OTP. No SIM. No email. Nothing to verify.</p>
+        <p class="ob-note">No SIM, no phone number. Your Gmail is only for sign-up — contacts never see it.</p>
         <button class="btn ghost" style="margin-top:10px" onclick="restorePick()">I have a backup — restore my account</button>
       </div>
       <div id="ob-step2" class="hide">
@@ -143,7 +158,7 @@
           <div class="card-eyebrow">Kalisi Identity</div>
           <div class="card-id" id="ob-card-id">@····</div>
           <div class="card-name" id="ob-card-name"></div>
-          <div class="card-hint">Generated on this device. Not linked to your SIM, email, or Aadhaar.</div>
+          <div class="card-hint">Generated on this device. Not linked to your SIM or Aadhaar. Your email is never shown to anyone.</div>
         </div>
         <!-- App only: encrypted backup prompt -->
         <div id="ob-backup-block" class="hide">
@@ -302,7 +317,7 @@
     <h2>How Kalisi works</h2>
     <p class="sub">Kalisi (కలిసి — "together") is a messenger built on one promise: your conversations belong to you, not to us.</p>
     <div class="pcard"><div class="ph">🪪 No phone number, ever</div>
-      <div class="ps">You are your @username. No OTP, no SIM, no contact-list upload. Share your handle only with people you choose — strangers have no way to find or spam you.</div></div>
+      <div class="ps">You are your @username. No SIM, no phone number, no contact-list upload. Your sign-up Gmail is never shown to anyone. Share your handle only with people you choose — strangers have no way to find or spam you.</div></div>
     <div class="pcard"><div class="ph">🔒 End-to-end encrypted</div>
       <div class="ps">Encryption keys are created and stored only on your phone. Messages are sealed before they leave your device — our server mathematically cannot read them.</div></div>
     <div class="pcard"><div class="ph">📮 Relay &amp; delete</div>

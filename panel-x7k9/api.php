@@ -36,6 +36,7 @@ try {
     case 'set_disabled': setDisabled($pdo, $in); break;
     case 'delete_user':  deleteUser($pdo, $in); break;
     case 'list_groups':  listGroups($pdo); break;
+    case 'trace':        traceForward($pdo, $in); break;
     case 'wipe_all':     wipeAll($pdo); break;
     case 'logout':       $pdo->prepare('DELETE FROM k_admin_sessions WHERE token = ?')->execute([$in['token'] ?? '']); out(true, ['bye'=>1]); break;
     default:             out(false, ['error' => 'unknown_action']);
@@ -88,16 +89,17 @@ function listUsers(PDO $pdo, array $in): void {
   $q = trim((string)($in['q'] ?? ''));
   $limit = min(500, max(10, (int)($in['limit'] ?? 200)));
   if ($q !== '') {
-    $st = $pdo->prepare("SELECT kal_id, username, name, disabled, created_at, last_seen
-                         FROM k_users WHERE username LIKE ? OR name LIKE ? OR kal_id LIKE ?
+    $st = $pdo->prepare("SELECT kal_id, username, name, email, disabled, created_at, last_seen
+                         FROM k_users WHERE username LIKE ? OR name LIKE ? OR kal_id LIKE ? OR email LIKE ?
                          ORDER BY last_seen DESC LIMIT $limit");
-    $like = '%'.$q.'%'; $st->execute([$like,$like,$like]);
+    $like = '%'.$q.'%'; $st->execute([$like,$like,$like,$like]);
   } else {
-    $st = $pdo->query("SELECT kal_id, username, name, disabled, created_at, last_seen
+    $st = $pdo->query("SELECT kal_id, username, name, email, disabled, created_at, last_seen
                        FROM k_users ORDER BY last_seen DESC LIMIT $limit");
   }
   $rows = array_map(fn($r)=>[
     'kal_id'=>$r['kal_id'],'username'=>$r['username'],'name'=>$r['name'],
+    'email'=>$r['email'] ?? null,
     'disabled'=>(int)$r['disabled'],
     'created_at'=>$r['created_at'],'last_seen'=>$r['last_seen']
   ], $st->fetchAll());
@@ -120,7 +122,7 @@ function deleteUser(PDO $pdo, array $in): void {
   out(true, ['deleted' => $kid]);
 }
 function wipeAll(PDO $pdo): void {
-  foreach (['k_queue','k_receipts','k_users','k_contacts','k_status','k_status_views','k_status_reacts','k_blocks','k_groups'] as $t) {
+  foreach (['k_queue','k_receipts','k_users','k_contacts','k_status','k_status_views','k_status_reacts','k_blocks','k_groups','k_fwd_log','k_email_otp','k_otp_log'] as $t) {
     try { $pdo->exec("DELETE FROM $t"); } catch (Throwable $e) {}
   }
   out(true, ['wiped' => true]);
@@ -135,6 +137,44 @@ function listGroups(PDO $pdo): void {
     ], $st->fetchAll());
   } catch (Throwable $e) {}
   out(true, ['groups' => $rows]);
+}
+
+/* Who first put a forwarded message into circulation. Takes the message text
+   (fingerprinted exactly as the app does) or a 64-char fingerprint.
+   The first row's received_from — or, if empty, its kal_id — is the
+   earliest known originator. */
+function fwdHash(string $kind, string $content): string {
+  if ($kind === 'text') {
+    $content = preg_replace('/(*UCP)\s+/u', ' ', preg_replace('/(*UCP)^\s+|\s+$/u', '', $content));
+  }
+  return hash('sha256', "kalisi-fwd-v1\n" . $kind . "\n" . $content);
+}
+function traceForward(PDO $pdo, array $in): void {
+  $hash = strtolower(trim((string)($in['hash'] ?? '')));
+  $text = (string)($in['text'] ?? '');
+  if (!preg_match('/^[a-f0-9]{64}$/', $hash)) {
+    if (trim($text) === '') out(false, ['error' => 'need_text_or_hash']);
+    $hash = fwdHash('text', $text);
+  }
+  $rows = [];
+  try {
+    $st = $pdo->prepare("SELECT f.created_at, f.kal_id, u.username, u.email,
+                                f.received_from, r.username AS from_username, r.email AS from_email
+                         FROM k_fwd_log f
+                         LEFT JOIN k_users u ON u.kal_id = f.kal_id
+                         LEFT JOIN k_users r ON r.kal_id = f.received_from
+                         WHERE f.hash = ? ORDER BY f.id ASC LIMIT 500");
+    $st->execute([$hash]);
+    $rows = $st->fetchAll();
+  } catch (Throwable $e) {}
+  $origin = null;
+  if ($rows) {
+    $f = $rows[0];
+    $origin = $f['received_from'] !== ''
+      ? ['kal_id'=>$f['received_from'],'username'=>$f['from_username'],'email'=>$f['from_email']]
+      : ['kal_id'=>$f['kal_id'],'username'=>$f['username'],'email'=>$f['email']];
+  }
+  out(true, ['hash'=>$hash, 'origin'=>$origin, 'forwards'=>$rows]);
 }
 
 function out(bool $ok, array $data = []): void { echo json_encode(['ok' => $ok] + $data); exit; }

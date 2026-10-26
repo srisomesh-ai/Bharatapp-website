@@ -31,6 +31,14 @@ api/
 ## Features
 No-phone @username identity · true E2E encryption · relay-and-delete with real deletion receipts · burn-on-read (text, photo, voice) · **voice messages** · personas · QR / add-by-username · disappearing messages · encrypted backup & restore (= login on new device) · 90-day username reclaim · impersonation protection · attractive landing page.
 
+## Sign-up verification & forward tracing (India IT Rules)
+- **Gmail + OTP at sign-up.** `email_otp_send` emails a 6-digit code (10 min, 5 tries, rate limited); `register` needs `email` + `email_code`. The Gmail is stored server-side only — `lookup`, `contacts_profiles`, status and request lists never return it. A persona made while signed in passes `parent_kal_id`/`parent_token` and inherits the email. Set `REQUIRE_EMAIL` false in `config.local.php` while older apps are still out there; set `MAIL_FROM` to a real mailbox on the domain.
+- **Forwarded messages only.** When a message is forwarded the app sends `fwd_hash` (SHA-256 of `kalisi-fwd-v1\n<kind>\n<content>`, text whitespace-normalised) and `fwd_from` (who it came from). Content stays end-to-end encrypted; ordinary messages are never fingerprinted. Rows expire after `FWD_RETENTION_DAYS` (180).
+- **Admin → Trace forward** takes the text or fingerprint and shows the earliest known originator (username, KAL-ID, email).
+
+## Icons
+`favicon.ico`, `icons/` and `site.webmanifest` are made from the app logo (`kalisi-native/ci/icon.png`).
+
 ## Run
 Open `index.html` via the web server (needs the css/ and js/ folders alongside). Deploy via Hostinger hPanel → Git.
 Server password: create `api/config.local.php` on the server with `<?php define('DB_PASS','...');`

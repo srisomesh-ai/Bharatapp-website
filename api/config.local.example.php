@@ -13,3 +13,14 @@ define('DB_PASS', 'your_database_password_here');
    Place your Firebase service-account JSON at api/fcm-key.json (NOT in git).
    Download it from Firebase Console → Project Settings → Service accounts → Generate new private key.
    Without this file, the app still works; only push-when-closed is disabled. */
+
+/* Sign-up email verification (Gmail + 6-digit code).
+   Codes are sent with PHP mail() from MAIL_FROM — on Hostinger create that
+   mailbox (hPanel → Emails) so Gmail accepts the messages.
+   REQUIRE_EMAIL false lets apps without the email step keep registering
+   while you roll out the update. */
+// define('MAIL_FROM', 'no-reply@kalisi.app');
+// define('REQUIRE_EMAIL', true);
+
+/* Forwarded-message fingerprints are deleted after this many days. */
+// define('FWD_RETENTION_DAYS', 180);

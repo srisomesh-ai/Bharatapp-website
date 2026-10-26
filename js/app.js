@@ -79,20 +79,41 @@ function freshData(withDemos){
 }
 
 /* ---------- onboarding ---------- */
+async function obSendCode(){
+  const email=($('ob-email').value||'').trim();
+  if(!/^[^@\s]+@(gmail|googlemail)\.com$/i.test(email)){toast('Enter a Gmail address');return;}
+  const b=$('ob-send-code'); b.disabled=true;
+  try{
+    await api('email_otp_send',{email});
+    $('ob-code-field').classList.remove('hide'); $('ob-code').focus();
+    toast('Code sent — check your Gmail');
+  }catch(e){
+    toast({bad_email:'Enter a valid Gmail address',too_soon:'Wait '+(e.wait||60)+'s before asking again',
+           too_many:'Too many codes — try again in an hour',email_send_failed:'Could not send the email — try again'}[e.message]||'Could not send code');
+  }
+  setTimeout(()=>{b.disabled=false;},30000);
+}
 async function obCreate(){
   const n=$('ob-name').value.trim();
   if(!n){toast('Enter a name first');return;}
   const un=($('ob-user').value||'').trim().replace(/^@/,'').toLowerCase();
   if(!/^[a-z0-9_]{3,20}$/.test(un)){toast('Username: 3–20 letters, numbers or _');return;}
+  const email=($('ob-email').value||'').trim(), code=($('ob-code').value||'').trim();
+  if(!email){toast('Enter your Gmail and tap Send code');return;}
+  if(!/^\d{6}$/.test(code)){toast('Enter the 6-digit code from your email');return;}
   toast('Creating @'+un+'…');
   let reg=null;
   try{
     const keys=await genKeys();
-    const r=await api('register',{name:n,username:un,pubkey:keys.pub});
+    const r=await api('register',{name:n,username:un,pubkey:keys.pub,email,email_code:code});
     reg={kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv};
   }catch(e){
     if(e.message==='username_taken'){toast('@'+un+' is taken — try another');return;}
     if(e.message==='bad_username'){toast('Username: 3–20 letters, numbers or _');return;}
+    const emailErr={bad_email:'Enter a valid Gmail address',email_required:'Verify your Gmail first',
+      wrong_code:'Wrong code — check your email',code_expired:'Code expired — tap Send code again',
+      too_many:'Too many tries — ask for a new code',email_limit:'This Gmail already has 5 accounts'}[e.message];
+    if(emailErr){toast(emailErr);return;}
     const demo=await kConfirm({title:'Server unreachable',message:'A real account cannot be created right now. Continue in offline demo mode? (demo bots only — no real chatting, no @username reserved)',okText:'Demo mode',cancelText:'Cancel'});
     if(!demo)return;
   }
@@ -371,7 +392,8 @@ async function addPersona(){
   let reg=null;
   try{
     const keys=await genKeys();
-    const r=await api('register',{name:n,username:un,pubkey:keys.pub});
+    const parent=me()&&me().token?{parent_kal_id:me().kalId,parent_token:me().token}:{};
+    const r=await api('register',{name:n,username:un,pubkey:keys.pub,...parent});
     reg={kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv};
   }catch(e){ toast('Server unreachable — offline persona'); }
   const id=uid();
