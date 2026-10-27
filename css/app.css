@@ -32,6 +32,14 @@ input,textarea,select{font-family:inherit;font-size:16px;color:var(--text)}
 #scr-onboard>div{flex:1 0 auto;display:flex;flex-direction:column}
 #scr-onboard .ob-top{margin-bottom:auto;padding-bottom:22px}
 @media (min-width:768px){ #ob-step1,#ob-step2,#ob-login{margin-bottom:auto} }
+/* log in sits in the middle of the screen, on a card */
+#ob-login{margin-bottom:auto;width:100%;max-width:440px;margin-left:auto;margin-right:auto}
+.lg-card{background:#fff;border:1px solid #E3E8F0;border-radius:22px;padding:28px 22px 20px;box-shadow:0 24px 48px -24px rgba(20,26,46,.22)}
+.lg-card .ob-h1{font-size:34px;margin-bottom:6px}
+.lg-sub{color:#6B7287;font-size:14.5px;margin:0 0 20px}
+.lg-newdev{background:rgba(6,186,112,.08);border:1px solid rgba(6,186,112,.25);color:#2B4A3C;border-radius:12px;padding:11px 13px;font-size:13.5px;line-height:1.45;margin:14px 0 12px}
+.lg-links{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:6px;color:#A0A6B8;font-size:14px}
+.lg-link{background:none;border:none;color:#06975C;font-weight:650;font-size:14px;padding:6px 2px;cursor:pointer}
 /* Onboarding light (default) text colors */
 #scr-onboard .ob-h1{color:#141A2E}
 #scr-onboard .ob-points li{color:#5A6178}

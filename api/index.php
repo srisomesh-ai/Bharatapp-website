@@ -28,6 +28,7 @@ try {
     case 'email_otp_send': emailOtpSend($pdo, $in); break;
     case 'login_otp_send':   loginOtpSend($pdo, $in); break;
     case 'login_otp_verify': loginOtpVerify($pdo, $in); break;
+    case 'login_password': loginPassword($pdo, $in); break;
     case 'device_list':   deviceList($pdo, $in); break;
     case 'account_delete': accountDelete($pdo, $in); break;
     case 'device_remove': deviceRemove($pdo, $in); break;
@@ -423,7 +424,11 @@ function loginOtpVerify(PDO $pdo, array $in): void {
   $r = loginAccount($pdo, $in);
   checkEmailCode($pdo, $r['_email'], trim((string)($in['code'] ?? '')));
   $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$r['_email']]);
+  out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')));
+}
 
+/** Log in one more device for account row $r; returns what the client needs. */
+function newDeviceSession(PDO $pdo, array $r, string $device): array {
   // keep at most 5 extra devices — the longest-unused one makes room
   $st = $pdo->prepare('SELECT id FROM k_devices WHERE kal_id = ? ORDER BY last_seen DESC');
   $st->execute([$r['kal_id']]);
@@ -431,10 +436,10 @@ function loginOtpVerify(PDO $pdo, array $in): void {
 
   $id = bin2hex(random_bytes(8));
   $token = bin2hex(random_bytes(24));
-  $name = mb_substr(trim((string)($in['device'] ?? '')), 0, 40) ?: 'Device';
+  $name = mb_substr(trim($device), 0, 40) ?: 'Device';
   $pdo->prepare('INSERT INTO k_devices (id, kal_id, token, name, created_at, last_seen) VALUES (?,?,?,?,NOW(),NOW())')
       ->execute([$id, $r['kal_id'], $token, $name]);
-  out(true, [
+  return [
     'kal_id'       => $r['kal_id'],
     'username'     => $r['username'],
     'name'         => $r['name'],
@@ -442,7 +447,76 @@ function loginOtpVerify(PDO $pdo, array $in): void {
     'pubkey'       => json_decode($r['pubkey'], true),
     'salt'         => (string)($r['salt'] ?? ''),
     'has_password' => !empty($r['verifier']),
-  ]);
+  ];
+}
+
+/**
+ * Log in with @username + password. A browser or phone that has logged in
+ * before carries a "trusted device" key and gets straight in. A new device is
+ * asked once for a code sent to the account's Gmail; after that it is trusted.
+ */
+function loginPassword(PDO $pdo, array $in): void {
+  $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
+  $verifier = (string)($in['verifier'] ?? '');
+  if (!preg_match('/^[a-z0-9_]{3,20}$/', $u) || $verifier === '') out(false, ['error' => 'bad_input']);
+  try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS k_trusted (
+      hash CHAR(64) PRIMARY KEY, kal_id VARCHAR(20) NOT NULL, created_at DATETIME NOT NULL,
+      last_used DATETIME NOT NULL, INDEX (kal_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS k_login_fail (
+      username VARCHAR(32) NOT NULL, at DATETIME NOT NULL, INDEX (username, at)) ENGINE=InnoDB");
+  } catch (Throwable $e) {}
+
+  // at most 10 wrong passwords per account per 15 minutes
+  $st = $pdo->prepare('SELECT COUNT(*) FROM k_login_fail WHERE username = ? AND at > (NOW() - INTERVAL 15 MINUTE)');
+  $st->execute([$u]);
+  if ((int)$st->fetchColumn() >= 10) out(false, ['error' => 'too_many']);
+
+  $st = $pdo->prepare('SELECT kal_id, username, name, pubkey, email, salt, verifier, disabled FROM k_users WHERE username = ?');
+  $st->execute([$u]);
+  $r = $st->fetch();
+  usleep(300000);
+  if (!$r || empty($r['verifier']) || !password_verify($verifier, $r['verifier'])) {
+    $pdo->prepare('INSERT INTO k_login_fail (username, at) VALUES (?, NOW())')->execute([$u]);
+    $pdo->exec('DELETE FROM k_login_fail WHERE at < (NOW() - INTERVAL 1 DAY)');
+    out(false, ['error' => $r && empty($r['verifier']) ? 'no_recovery' : 'wrong_password']);
+  }
+  if ((int)$r['disabled'] === 1) out(false, ['error' => 'account_disabled']);
+
+  // trusted device → straight in
+  $trust = (string)($in['trust'] ?? '');
+  if ($trust !== '') {
+    $h = hash('sha256', $trust);
+    $st = $pdo->prepare('SELECT 1 FROM k_trusted WHERE hash = ? AND kal_id = ?');
+    $st->execute([$h, $r['kal_id']]);
+    if ($st->fetch()) {
+      $pdo->prepare('UPDATE k_trusted SET last_used = NOW() WHERE hash = ?')->execute([$h]);
+      out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')));
+    }
+  }
+
+  $email = (string)($r['email'] ?? '');
+  $newTrust = function () use ($pdo, $r): string {
+    $t = bin2hex(random_bytes(24));
+    $pdo->prepare('INSERT INTO k_trusted (hash, kal_id, created_at, last_used) VALUES (?,?,NOW(),NOW())')
+        ->execute([hash('sha256', $t), $r['kal_id']]);
+    return $t;
+  };
+  if ($email === '') {
+    // older account without a Gmail: the password alone has to do
+    out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')) + ['trust' => $newTrust()]);
+  }
+
+  $code = trim((string)($in['code'] ?? ''));
+  if ($code === '') {
+    issueCode($pdo, $email);
+    [$name, $domain] = explode('@', $email, 2);
+    out(true, ['need_code' => true,
+               'email_hint' => mb_substr($name, 0, 2) . str_repeat('•', max(3, mb_strlen($name) - 2)) . '@' . $domain]);
+  }
+  checkEmailCode($pdo, $email, $code);
+  $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$email]);
+  out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')) + ['trust' => $newTrust()]);
 }
 
 /* Delete my account and everything the server holds for it. The user types
@@ -476,6 +550,7 @@ function accountDelete(PDO $pdo, array $in): void {
     'DELETE FROM k_blocks WHERE blocker = ? OR blocked = ?' => 2,
     'DELETE FROM k_devices WHERE kal_id = ?' => 1,
     'DELETE FROM k_fcm WHERE kal_id = ?' => 1,
+    'DELETE FROM k_trusted WHERE kal_id = ?' => 1,
   ];
   foreach ($del as $sql => $n) {
     try { $pdo->prepare($sql)->execute(array_fill(0, $n, $kid)); } catch (Throwable $e) {}
