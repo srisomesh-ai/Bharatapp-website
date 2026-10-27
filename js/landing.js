@@ -33,6 +33,7 @@ function showInvite(u){
   });
 }
 function bootRoute(){
+  if(isNativeApp())document.body.classList.add('native-app');
   const invited=handleInvite();
   if(S && S.identities && S.identities.length){
     // existing account on this device → straight to app
@@ -54,7 +55,33 @@ function bootRoute(){
   return false;
 }
 
-function landStart(){
+/* ---- back to the home page from sign-up / log-in ----
+   The browser's Back button does the same: entering sign-up or log-in adds
+   a history entry, and going back to it shows the home page again. */
+function goHome(){
+  if(history.state&&history.state.kscr){ history.back(); return; }
+  showLanding();
+}
+function showLanding(){
+  if(isNativeApp())return;           // the app has no home page
+  document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
+  $('scr-landing').classList.add('on');
+}
+function _pushScreen(name){
+  if(isNativeApp())return;
+  if(history.state&&history.state.kscr){ history.replaceState({kscr:name},''); }
+  else history.pushState({kscr:name},'');
+}
+window.addEventListener('popstate',()=>{
+  // only while signed out: the home page is the start of the journey
+  if(S&&S.identities&&S.identities.length&&me()?.token)return;
+  if(history.state&&history.state.kscr==='login'){ showLogin(true); return; }
+  if(history.state&&history.state.kscr==='signup'){ landStart(true); return; }
+  showLanding();
+});
+
+function landStart(fromHistory){
+  if(fromHistory!==true)_pushScreen('signup');
   // go to onboarding (create account)
   document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
   $('scr-onboard').classList.add('on');
@@ -67,7 +94,8 @@ function landStart(){
 function landRestore(){ showLogin(); }
 
 /* ---- log in: @username + Gmail must match → code by email → password ---- */
-function showLogin(){
+function showLogin(fromHistory){
+  if(fromHistory!==true)_pushScreen('login');
   document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
   $('scr-onboard').classList.add('on');
   $('ob-step1').classList.add('hide'); $('ob-step2').classList.add('hide');
