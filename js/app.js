@@ -447,9 +447,10 @@ function setSub(txt,typing){
 async function fetchPresence(c){
   if(!c.real||c.isGroup||!me().token){ $('chat-sub-t').textContent=''; return; }
   try{
-    const r=await api('presence',{...authBody(),kal_id:c.kalId});
+    const r=await api('presence',{...authBody(),target:c.kalId});
     if(curChat!==c.id)return;
     if(typeof _typingFrom!=='undefined' && _typingFrom===c.id)return; // don't overwrite "typing…"
+    if(r.hidden){ $('chat-sub-t').textContent=''; return; }   // they hide their last seen
     const t=r.last_seen;
     const diff=(Date.now()-t)/1000;
     let s;
