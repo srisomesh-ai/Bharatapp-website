@@ -1,6 +1,6 @@
 # Kalisi — Private messenger. No phone number.
 
-**Always together, always private.** Kalisi (కలిసి, "together") — a WhatsApp-class messenger where identity is a @username, never a phone number. End-to-end encrypted; chats live only on your phone. Domain: kalisi.app
+**Always together, always private.** Kalisi (కలిసి, "together") — a WhatsApp-class messenger where identity is a @username, never a phone number. End-to-end encrypted; chats live only on your phone. Domain: bharatapp.chat
 
 ## Project structure
 ```

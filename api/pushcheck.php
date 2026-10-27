@@ -2,7 +2,7 @@
 /* Push diagnostics.
  *
  * Open this in a browser to see, in plain terms, whether push can work:
- *   https://kalisi.app/api/pushcheck.php
+ *   https://bharatapp.chat/api/pushcheck.php
  *
  * It reports configuration only. It never prints the key, and it can't read
  * any message — it just answers "is push set up, and are devices registered".

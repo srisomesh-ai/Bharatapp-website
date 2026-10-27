@@ -4,9 +4,9 @@
 function isNativeApp(){
   return /KalisiApp/i.test(navigator.userAgent) || location.search.indexOf('app=1')>=0 || window.KalisiNative || window.KalisiBundled || location.protocol==='file:';
 }
-/* ---- invite links (what the QR holds): kalisi.app/add/<username> ---- */
+/* ---- invite links (what the QR holds): bharatapp.chat/add/<username> ---- */
 const PLAY_URL='https://play.google.com/store/apps/details?id=com.messenger.app';
-function inviteLink(username){ return 'https://kalisi.app/add/'+username; }
+function inviteLink(username){ return 'https://bharatapp.chat/add/'+username; }
 /* Returns true when the page was opened from an invite and handled it. */
 function handleInvite(){
   const u=(new URLSearchParams(location.search).get('add')||'').toLowerCase();

@@ -282,14 +282,14 @@ async function addById(){
 function makeInvite(){
   const code=Math.random().toString(36).slice(2,8).toUpperCase();
   $('invite-box').classList.remove('hide');
-  $('invite-link').textContent=`kalisi.app/i/${code}`;
+  $('invite-link').textContent=`bharatapp.chat/i/${code}`;
   let left=600; clearInterval(inviteTimer);
   const tick=()=>{ left--; const mm=String(Math.floor(left/60)).padStart(2,'0'),ss=String(left%60).padStart(2,'0');
     const el=$('invite-ttl'); if(!el){clearInterval(inviteTimer);return;}
     el.textContent=`${mm}:${ss}`;
     if(left<=0){clearInterval(inviteTimer);$('invite-link').textContent='Link expired · generate a new one';el.textContent='☠';}};
   inviteTimer=setInterval(tick,1000);
-  copyText(`kalisi.app/i/${code}`,'Invite link copied — expires in 10 min');
+  copyText(`bharatapp.chat/i/${code}`,'Invite link copied — expires in 10 min');
 }
 function copyText(t,msg){ navigator.clipboard?.writeText(t).then(()=>toast(msg)).catch(()=>toast(t)); }
 
