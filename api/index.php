@@ -527,12 +527,12 @@ function echoToMyDevices(PDO $pdo, array $me, string $peer, string $cid, string 
 }
 
 function sendOtpMail(string $to, string $code): bool {
-  $from = defined('MAIL_FROM') ? MAIL_FROM : 'no-reply@kalisi.app';
+  $from = defined('MAIL_FROM') ? MAIL_FROM : 'no-reply@bharatapp.chat';
   $subject = 'Your Kalisi code: ' . $code;
   $body = "Your Kalisi verification code is:\r\n\r\n    $code\r\n\r\n"
         . "It expires in 10 minutes. If you didn't ask for it, ignore this email.\r\n\r\n"
         . "Your email is never shown to your contacts.\r\n— Kalisi";
-  $headers = "From: Kalisi <$from>\r\nReply-To: support@kalisi.app\r\n"
+  $headers = "From: Kalisi <$from>\r\nReply-To: support@bharatapp.chat\r\n"
            . "Content-Type: text/plain; charset=utf-8\r\n";
   try { return @mail($to, $subject, $body, $headers, '-f' . $from); }
   catch (Throwable $e) { return false; }
@@ -993,7 +993,7 @@ function storeStatusFile(string $dataUrl, string $type): ?string {
   if (@file_put_contents($dir . '/' . $name, $bytes) === false) return null;
 
   $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-  $host   = $_SERVER['HTTP_HOST'] ?? 'kalisi.app';
+  $host   = $_SERVER['HTTP_HOST'] ?? 'bharatapp.chat';
   $base   = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/api/index.php'), '/');
   return 'file:' . $scheme . '://' . $host . $base . '/media/status/' . $name;
 }

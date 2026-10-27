@@ -19,7 +19,7 @@ define('DB_PASS', 'your_database_password_here');
    mailbox (hPanel → Emails) so Gmail accepts the messages.
    REQUIRE_EMAIL false lets apps without the email step keep registering
    while you roll out the update. */
-// define('MAIL_FROM', 'no-reply@kalisi.app');
+// define('MAIL_FROM', 'no-reply@bharatapp.chat');
 // define('REQUIRE_EMAIL', true);
 
 /* Forwarded-message fingerprints are deleted after this many days. */

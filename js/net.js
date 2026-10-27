@@ -14,7 +14,7 @@ function saveFile(name, textData){
 /* ============ Kalisi network + E2E crypto layer ============ */
 // When the app is bundled (loaded from file:// or the app asset host), use the
 // absolute server URL. On the website it stays relative.
-const API_SERVER='https://kalisi.app';
+const API_SERVER='https://bharatapp.chat';
 const API=(location.protocol==='file:'||location.protocol==='https:'&&location.hostname==='appassets.androidplatform.net'||window.KalisiBundled)
   ? API_SERVER+'/api/index.php'
   : 'api/index.php';
