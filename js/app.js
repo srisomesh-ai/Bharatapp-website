@@ -34,49 +34,17 @@ function chat(id){if(!D().chats[id])D().chats[id]={msgs:[],timer:0,unread:0};ret
 function initials(n){return n.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();}
 function avatarHTML(o,cls){return `<div class="avatar ${cls||''}" style="background:${o.color}">${esc(initials(o.name))}</div>`;}
 
-/* ---------- bot brains ---------- */
-const BOT_LINES={
- ravi:["Cheppu bro, whats the plan? 😄","Ha ok ok, correct point.","BharatApp Chat lo unnam kabatti freega matladachu 😎","Sare, evening call cheddam.","👍👍","Nenu kuda adhe anukunna!","Send me the location once ready.","Deal cheseddam, no problem."],
- priya:["Got it! Will check and tell you.","Nice! BharatApp Chat feels so smooth 😍","Ok done ✅","Hmm let me think about it.","Perfect, thank you!","Sending you the details in a bit.","Haha true! 😂","That burn message feature is crazy 🔥"],
- team:["Tip: tap 🔥 before sending to make a message burn after reading.","Your messages are relayed and instantly deleted from our server — long-press any delivered message to see its deletion receipt.","Try the Connect tab to see your QR code. Friends scan it in person — no numbers exchanged.","You can create a second persona from your avatar (top-left). Separate ID, separate chats."]
-};
-function botReply(c){
-  const pool=BOT_LINES[c.brain]||BOT_LINES.priya;
-  return pool[Math.floor(Math.random()*pool.length)];
-}
-
 /* ---------- first run ---------- */
-function seedIdentity(name,reg,withDemos=true){
+function seedIdentity(name,reg){
   const id=uid();
   const ident={id,name,kalId:reg?reg.kalId:kalId(),color:COLORS[0],created:now()};
   if(reg){ident.username=reg.username;ident.token=reg.token;ident.pub=reg.pub;ident.priv=reg.priv;}
   S={v:1,identities:[ident],active:id,data:{}};
-  S.data[id]=freshData(withDemos);
+  S.data[id]=freshData();
   save();
   return ident;
 }
-function freshData(withDemos){
-  const d={contacts:[],chats:{}};
-  if(withDemos){
-    const team={id:uid(),name:'BharatApp Chat Team',kalId:'KAL-TEAM-0001',color:'#06BA70',bot:true,brain:'team',verified:true};
-    const ravi={id:uid(),name:'Ravi · Demo',kalId:kalId(),color:'#7FA8F5',bot:true,brain:'ravi'};
-    const priya={id:uid(),name:'Priya · Demo',kalId:kalId(),color:'#E4739A',bot:true,brain:'priya'};
-    d.contacts.push(team,ravi,priya);
-    const t=now();
-    d.chats[team.id]={timer:0,unread:2,msgs:[
-      {id:uid(),from:'them',kind:'text',text:'Welcome to BharatApp Chat 🙏 Everything you send here stays on your phone. Our server only relays — then forgets.',ts:t-3600e3,status:'read'},
-      {id:uid(),from:'them',kind:'text',text:'This is a burn-on-read message. Tap it — it can be viewed exactly once.',ts:t-3500e3,status:'read',burn:true},
-    ]};
-    d.chats[ravi.id]={timer:0,unread:1,msgs:[
-      {id:uid(),from:'them',kind:'text',text:'Bro app super undhi! Number ivvakunda chat 🔥',ts:t-1800e3,status:'read'},
-    ]};
-    d.chats[priya.id]={timer:0,unread:0,msgs:[
-      {id:uid(),from:'me',kind:'text',text:'Hi Priya, testing BharatApp Chat',ts:t-7200e3,status:'read',receipt:'pending'},
-      {id:uid(),from:'them',kind:'text',text:'Hey! Yes it works great 😍',ts:t-7100e3,status:'read'},
-    ]};
-  }
-  return d;
-}
+function freshData(){ return {contacts:[],chats:{}}; }
 
 /* ---------- onboarding ---------- */
 /* ---- sign-up: A) name, @username, Gmail → code sent; B) code + password → account → sign in ---- */
@@ -250,7 +218,6 @@ function renderConnect(){
       <div class="qr-sub">Friends type <b style="color:var(--gold)">${esc(handleOf(m))}</b> or scan this to connect.<br>No phone number is exchanged — ever.</div>
       <div class="row2">
         <button class="btn ghost" onclick="copyText('${esc(handleOf(m))}','Copied — share it anywhere')">Copy</button>
-        <button class="btn ghost" onclick="simulateScan()">Simulate a friend scanning</button>
       </div>
     </div>
     <h3>Add a friend</h3>
@@ -286,15 +253,6 @@ function openMyQR(){
     </div>`;
   // a link: opens the app and connects — or the Play Store if it isn't installed
   openSheet('sheet-qr'); drawQR('qr-slot2',m.username?inviteLink(m.username):handleOf(m));
-}
-function simulateScan(){
-  const names=[['Anil K','#5FC9C9','priya'],['Suresh V','#B58CF0','ravi'],['Deepika','#E4A05F','priya'],['Karthik','#59C98D','ravi']];
-  const pick=names[Math.floor(Math.random()*names.length)];
-  const c={id:uid(),name:pick[0],kalId:kalId(),color:pick[1],bot:true,brain:pick[2]};
-  D().contacts.push(c); chat(c.id); save();
-  toast(`${c.name} connected via QR ✅`); renderChats();
-  switchTab(document.querySelector('.tab[data-pane="pane-chats"]')); openChat(c.id);
-  setTimeout(()=>{ botSend(c.id,'Hey! Scanned your QR, we are connected on BharatApp Chat now 🙌'); },1200);
 }
 async function addById(){
   if(!me().token){toast('⚠️ This account was created offline and cannot chat. Log out (Privacy tab) and sign up again.');return;}
@@ -439,7 +397,7 @@ async function addPersona(){
   const np={id,name:n,kalId:reg?reg.kalId:kalId(),color:COLORS[S.identities.length%COLORS.length],created:now()};
   if(reg){np.username=reg.username;np.token=reg.token;np.pub=reg.pub;np.priv=reg.priv;}
   S.identities.push(np);
-  S.data[id]=freshData(false);
+  S.data[id]=freshData();
   S.active=id; save();
   $('new-persona').value=''; closeSheets(); renderAll();
   toast('New persona created — fresh ID, fresh chats');
@@ -749,28 +707,8 @@ function pushMine(part){
       else toast('Not sent yet — it will send when you are back online');
     });
   }
-  if(c.bot){
-    setTimeout(async()=>{ m.status='delivered'; m.receipt=(await sha(m.id+m.ts)).slice(0,16); save(); if(curChat)renderMsgs(false); },700);
-    setTimeout(()=>{ if(curChat===c.id)setSub('typing…',true); },1400);
-    setTimeout(()=>{
-      m.status='read'; if(m.burn&&!m.burned){m.revealed=true; setTimeout(()=>burnMsg(m.id),1500);} save();
-      botSend(c.id, botReply(c));
-      if(curChat===c.id)setSub();
-    },2600+Math.random()*1200);
-  }
   scheduleExpiry(m,curChat);
 }
-function botSend(cid,text){
-  const ch=chat(cid);
-  const m={id:uid(),from:'them',kind:'text',text,ts:now(),status:'read'};
-  if(ch.timer)m.expireAt=now()+ch.timer*1000;
-  ch.msgs.push(m);
-  if(curChat!==cid)ch.unread=(ch.unread||0)+1;
-  save();
-  if(curChat===cid)renderMsgs(true); else renderChats();
-  scheduleExpiry(m,cid);
-}
-
 /* ---------- disappearing messages ---------- */
 function scheduleExpiry(m,cid){
   if(!m.expireAt)return;
