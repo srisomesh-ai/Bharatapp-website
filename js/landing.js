@@ -155,9 +155,16 @@ async function lgLogin(){
   const go=$('lg-go'); go.disabled=true; lgMsg('Checking…');
   try{
     if(!_lgKeys||_lgKeys.u!==u||_lgKeys.pass!==pass){
+      // the server only gives out the password salt to a browser it trusts,
+      // or once the code from the account's Gmail is entered
       let rs;
-      try{ rs=await api('recover_salt',{username:u}); }
-      catch(e){ lgMsg(e.message==='no_recovery'?LOGIN_ERR.no_recovery:LOGIN_ERR.wrong_password); return; }
+      try{ rs=await api('recover_salt',{username:u,trust:_getTrust(u),code:codeStep?code:''}); }
+      catch(e){ lgMsg(e.message==='no_recovery'?LOGIN_ERR.wrong_password:(LOGIN_ERR[e.message]||'Could not log in — check your internet')); return; }
+      if(rs.need_code){
+        $('lg-hint').textContent=rs.email_hint||'your Gmail';
+        $('lg-step2').classList.remove('hide'); $('lg-code').focus();
+        lgMsg(''); return;
+      }
       // the key was made with the username the account had at sign-up
       const keyUser=rs.key_username||u;
       const keys=await keyFromPassword(keyUser,pass,rs.salt);

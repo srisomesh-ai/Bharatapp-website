@@ -86,15 +86,9 @@ function register(PDO $pdo, array $in): void {
   // server only — lookups, profiles and contacts never return it. A persona
   // made from an account that is already signed in takes that account's email.
   $email = registrationEmail($pdo, $in);
-  $st = $pdo->prepare('SELECT kal_id, last_seen FROM k_users WHERE username = ?'); $st->execute([$username]);
-  if ($ex = $st->fetch()) {
-    if (strtotime($ex['last_seen']) < time() - 90*86400) {
-      // inactive 90+ days: release the handle (account keeps its KAL-ID)
-      $pdo->prepare("UPDATE k_users SET username = '' WHERE kal_id = ?")->execute([$ex['kal_id']]);
-    } else {
-      out(false, ['error' => 'username_taken']);
-    }
-  }
+  // a username belongs to its account for good — never released to someone else
+  $st = $pdo->prepare('SELECT 1 FROM k_users WHERE username = ?'); $st->execute([$username]);
+  if ($st->fetch()) out(false, ['error' => 'username_taken']);
   unset($pubkey['d']); // never accept private material
 
   // Optional account recovery. The app derives its key from the password, so
@@ -299,16 +293,46 @@ function profileUpdate(PDO $pdo, array $in): void {
 function recoverSalt(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
   if (!preg_match('/^[a-z0-9_]{3,30}$/', $u)) out(false, ['error' => 'bad_username']);
+  $st = $pdo->prepare('SELECT kal_id, salt, verifier, key_username, email FROM k_users WHERE username = ?');
+  $st->execute([$u]);
+  $r = $st->fetch();
+  if (!$r || empty($r['verifier'])) out(false, ['error' => 'no_recovery']);
+  // the key comes from the username it was created with, which may be an
+  // older @username — the app must derive it with that one
+  $give = fn() => out(true, ['salt' => (string)$r['salt'], 'key_username' => (string)($r['key_username'] ?: $u)]);
+
+  // The salt plus the public key is all anyone needs to try passwords offline,
+  // so it is only handed out with proof: a device this account already
+  // trusts, or the code sent to the account's Gmail. Old accounts without a
+  // Gmail have nothing else to check.
+  $email = (string)($r['email'] ?? '');
+  if ($email === '') $give();
+  $trust = (string)($in['trust'] ?? '');
+  if ($trust !== '' && trustedDevice($pdo, $r['kal_id'], $trust)) $give();
+  $code = trim((string)($in['code'] ?? ''));
+  if ($code !== '') {
+    checkEmailCode($pdo, $email, $code);   // stops here if wrong; the login step uses it up
+    $give();
+  }
+  // a code went out under a minute ago (e.g. the page was reloaded): ask for that one
+  $st = $pdo->prepare('SELECT 1 FROM k_otp_log WHERE email = ? AND created_at > (NOW() - INTERVAL 60 SECOND)');
+  $st->execute([$email]);
+  if (!$st->fetchColumn()) issueCode($pdo, $email);
+  out(true, ['need_code' => true, 'email_hint' => emailHint($email)]);
+}
+
+function emailHint(string $email): string {
+  [$name, $domain] = explode('@', $email, 2);
+  return mb_substr($name, 0, 2) . str_repeat('•', max(3, mb_strlen($name) - 2)) . '@' . $domain;
+}
+
+function trustedDevice(PDO $pdo, string $kalId, string $trust): bool {
   try {
-    $st = $pdo->prepare('SELECT salt, verifier, key_username FROM k_users WHERE username = ?');
-    $st->execute([$u]);
-    $r = $st->fetch();
-    if (!$r || empty($r['verifier'])) out(false, ['error' => 'no_recovery']);
-    // the key comes from the username it was created with, which may be an
-    // older @username — the app must derive it with that one
-    out(true, ['salt' => (string)$r['salt'], 'key_username' => (string)($r['key_username'] ?: $u)]);
+    $st = $pdo->prepare('SELECT 1 FROM k_trusted WHERE hash = ? AND kal_id = ?');
+    $st->execute([hash('sha256', $trust), $kalId]);
+    return (bool)$st->fetchColumn();
   } catch (Throwable $e) {
-    out(false, ['error' => 'no_recovery']);
+    return false;   // table not made yet
   }
 }
 
@@ -322,14 +346,17 @@ function recoverLogin(PDO $pdo, array $in): void {
   if (!preg_match('/^[a-z0-9_]{3,30}$/', $u) || $verifier === '' || !is_array($pubkey)) {
     out(false, ['error' => 'bad_input']);
   }
-  $st = $pdo->prepare('SELECT kal_id, name, verifier FROM k_users WHERE username = ?');
+  $st = $pdo->prepare('SELECT kal_id, name, verifier, email FROM k_users WHERE username = ?');
   $st->execute([$u]);
   $r = $st->fetch();
   if (!$r || empty($r['verifier'])) out(false, ['error' => 'no_recovery']);
+  // accounts with a Gmail log in with the emailed code instead
+  if (!empty($r['email'])) out(false, ['error' => 'use_gmail_login']);
+  if (tooManyFails($pdo, $u)) out(false, ['error' => 'too_many']);
 
   // slow down guessing
   usleep(300000);
-  if (!password_verify($verifier, $r['verifier'])) out(false, ['error' => 'wrong_password']);
+  if (!password_verify($verifier, $r['verifier'])) { noteFail($pdo, $u); out(false, ['error' => 'wrong_password']); }
 
   unset($pubkey['d']);
   $token = bin2hex(random_bytes(24));
@@ -458,6 +485,23 @@ function newDeviceSession(PDO $pdo, array $r, string $device): array {
  * before carries a "trusted device" key and gets straight in. A new device is
  * asked once for a code sent to the account's Gmail; after that it is trusted.
  */
+/** At most 10 wrong passwords per account per 15 minutes. */
+function tooManyFails(PDO $pdo, string $u): bool {
+  try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS k_login_fail (
+      username VARCHAR(32) NOT NULL, at DATETIME NOT NULL, INDEX (username, at)) ENGINE=InnoDB");
+    $st = $pdo->prepare('SELECT COUNT(*) FROM k_login_fail WHERE username = ? AND at > (NOW() - INTERVAL 15 MINUTE)');
+    $st->execute([$u]);
+    return (int)$st->fetchColumn() >= 10;
+  } catch (Throwable $e) {
+    return false;
+  }
+}
+function noteFail(PDO $pdo, string $u): void {
+  $pdo->prepare('INSERT INTO k_login_fail (username, at) VALUES (?, NOW())')->execute([$u]);
+  $pdo->exec('DELETE FROM k_login_fail WHERE at < (NOW() - INTERVAL 1 DAY)');
+}
+
 function loginPassword(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
   $verifier = (string)($in['verifier'] ?? '');
@@ -466,36 +510,25 @@ function loginPassword(PDO $pdo, array $in): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS k_trusted (
       hash CHAR(64) PRIMARY KEY, kal_id VARCHAR(20) NOT NULL, created_at DATETIME NOT NULL,
       last_used DATETIME NOT NULL, INDEX (kal_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS k_login_fail (
-      username VARCHAR(32) NOT NULL, at DATETIME NOT NULL, INDEX (username, at)) ENGINE=InnoDB");
   } catch (Throwable $e) {}
 
-  // at most 10 wrong passwords per account per 15 minutes
-  $st = $pdo->prepare('SELECT COUNT(*) FROM k_login_fail WHERE username = ? AND at > (NOW() - INTERVAL 15 MINUTE)');
-  $st->execute([$u]);
-  if ((int)$st->fetchColumn() >= 10) out(false, ['error' => 'too_many']);
+  if (tooManyFails($pdo, $u)) out(false, ['error' => 'too_many']);
 
   $st = $pdo->prepare('SELECT kal_id, username, name, pubkey, email, salt, verifier, disabled FROM k_users WHERE username = ?');
   $st->execute([$u]);
   $r = $st->fetch();
   usleep(300000);
   if (!$r || empty($r['verifier']) || !password_verify($verifier, $r['verifier'])) {
-    $pdo->prepare('INSERT INTO k_login_fail (username, at) VALUES (?, NOW())')->execute([$u]);
-    $pdo->exec('DELETE FROM k_login_fail WHERE at < (NOW() - INTERVAL 1 DAY)');
+    noteFail($pdo, $u);
     out(false, ['error' => $r && empty($r['verifier']) ? 'no_recovery' : 'wrong_password']);
   }
   if ((int)$r['disabled'] === 1) out(false, ['error' => 'account_disabled']);
 
   // trusted device → straight in
   $trust = (string)($in['trust'] ?? '');
-  if ($trust !== '') {
-    $h = hash('sha256', $trust);
-    $st = $pdo->prepare('SELECT 1 FROM k_trusted WHERE hash = ? AND kal_id = ?');
-    $st->execute([$h, $r['kal_id']]);
-    if ($st->fetch()) {
-      $pdo->prepare('UPDATE k_trusted SET last_used = NOW() WHERE hash = ?')->execute([$h]);
-      out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')));
-    }
+  if ($trust !== '' && trustedDevice($pdo, $r['kal_id'], $trust)) {
+    $pdo->prepare('UPDATE k_trusted SET last_used = NOW() WHERE hash = ?')->execute([hash('sha256', $trust)]);
+    out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')));
   }
 
   $email = (string)($r['email'] ?? '');
@@ -513,9 +546,7 @@ function loginPassword(PDO $pdo, array $in): void {
   $code = trim((string)($in['code'] ?? ''));
   if ($code === '') {
     issueCode($pdo, $email);
-    [$name, $domain] = explode('@', $email, 2);
-    out(true, ['need_code' => true,
-               'email_hint' => mb_substr($name, 0, 2) . str_repeat('•', max(3, mb_strlen($name) - 2)) . '@' . $domain]);
+    out(true, ['need_code' => true, 'email_hint' => emailHint($email)]);
   }
   checkEmailCode($pdo, $email, $code);
   $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$email]);
@@ -712,11 +743,9 @@ function changeUsername(PDO $pdo, array $in): void {
     $days = ceil((strtotime($u['username_changed_at']) + 30*86400 - time()) / 86400);
     out(false, ['error' => 'too_soon', 'days' => $days]);
   }
-  // availability (respect 90-day reclaim)
-  $st = $pdo->prepare('SELECT last_seen FROM k_users WHERE username = ? AND kal_id <> ?');
-  $st->execute([$new, $me['kal_id']]); $ex = $st->fetch();
-  if ($ex && strtotime($ex['last_seen']) > time() - 90*86400) out(false, ['error' => 'username_taken']);
-  if ($ex) $pdo->prepare("UPDATE k_users SET username='' WHERE username=?")->execute([$new]);
+  $st = $pdo->prepare('SELECT 1 FROM k_users WHERE username = ? AND kal_id <> ?');
+  $st->execute([$new, $me['kal_id']]);
+  if ($st->fetch()) out(false, ['error' => 'username_taken']);
   // keep the username the account key was made with, for logging in later
   $pdo->prepare('UPDATE k_users SET key_username = COALESCE(key_username, username), username = ?, username_changed_at = NOW() WHERE kal_id = ?')
       ->execute([$new, $me['kal_id']]);
@@ -727,10 +756,8 @@ function checkUsername(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
   if (strlen($u) === 3 && preg_match('/^[a-z0-9_]+$/', $u)) out(true, ['available' => false, 'reason' => 'too_short']);
   if (!preg_match('/^[a-z0-9_]{4,30}$/', $u)) out(true, ['available' => false, 'reason' => 'invalid']);
-  $st = $pdo->prepare('SELECT last_seen FROM k_users WHERE username = ?'); $st->execute([$u]);
-  $ex = $st->fetch();
-  $avail = !$ex || strtotime($ex['last_seen']) < time() - 90*86400;
-  out(true, ['available' => $avail]);
+  $st = $pdo->prepare('SELECT 1 FROM k_users WHERE username = ?'); $st->execute([$u]);
+  out(true, ['available' => !$st->fetch()]);
 }
 
 function reqSend(PDO $pdo, array $in): void {
