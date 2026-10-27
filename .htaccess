@@ -2,3 +2,17 @@
 # opens the app (or the Play Store, or connects in the browser)
 RewriteEngine On
 RewriteRule ^add/([A-Za-z0-9_]{3,20})/?$ /?add=$1 [R=302,L]
+
+# Pages must never be served stale from a cache (Hostinger/LiteSpeed or the
+# browser): always check for a newer copy. CSS/JS/images are versioned (?v=),
+# so they can still be cached.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html?|webmanifest)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+<IfModule LiteSpeed>
+  <FilesMatch "\.(html?)$">
+    CacheLookup off
+  </FilesMatch>
+</IfModule>
