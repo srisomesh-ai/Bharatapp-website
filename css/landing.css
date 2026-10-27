@@ -103,3 +103,4 @@
 /* the primary green button used on the sign-up and log-in screens */
 .hero-start{background:linear-gradient(135deg,#06BA70,#029573);color:#fff;font-weight:800;box-shadow:0 12px 34px -10px rgba(6,186,112,.55);border:none;font-size:16px}
 .hero-start:active{transform:scale(.98)}
+.lp-bharat{padding:44px 0 48px}
