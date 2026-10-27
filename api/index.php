@@ -55,6 +55,7 @@ try {
     case 'contacts_state': contactsState($pdo, $in); break;
     case 'presence':      presence($pdo, $in); break;
     case 'fcm_register':  fcmRegister($pdo, $in); break;
+    case 'notify_devices': notifyDevices($pdo, $in); break;
     case 'status_view':   statusView($pdo, $in); break;
     case 'status_viewers': statusViewers($pdo, $in); break;
     case 'status_delete':  statusDelete($pdo, $in); break;
@@ -178,10 +179,13 @@ function send(PDO $pdo, array $in): void {
   if (str_starts_with($hint, 'call')) {
     if ($hint === 'call-offer') {
       sendPush($pdo, $to, $sname, 'Incoming voice call', $me['kal_id'], 'call');
+    } elseif ($hint === 'call-end') {
+      // stop the ringing on a closed phone (and show "missed call")
+      sendPush($pdo, $to, $sname, 'Missed voice call', $me['kal_id'], 'call_end');
     }
     // other call signalling is silent — the app is already awake by then
   } else {
-    sendPush($pdo, $to, 'BharatApp Chat', $sname.' sent you a message', $me['kal_id']);
+    sendPush($pdo, $to, $sname, 'New message', $me['kal_id']);
   }
   out(true, ['queued' => true]);
 }
@@ -697,8 +701,11 @@ function fcmRegister(PDO $pdo, array $in): void {
   $tok = substr(trim((string)($in['fcm_token'] ?? '')), 0, 300);
   if ($tok==='') out(false,['error'=>'bad_token']);
   try { $pdo->exec("CREATE TABLE IF NOT EXISTS k_fcm (kal_id VARCHAR(14) NOT NULL, token VARCHAR(300) NOT NULL, updated_at DATETIME NOT NULL, PRIMARY KEY(kal_id,token)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"); } catch (Throwable $e) {}
-  $pdo->prepare("INSERT INTO k_fcm (kal_id,token,updated_at) VALUES (?,?,NOW()) ON DUPLICATE KEY UPDATE updated_at=NOW()")
-      ->execute([$me['kal_id'],$tok]);
+  try { $pdo->exec("ALTER TABLE k_fcm ADD COLUMN caps VARCHAR(32) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+  // 'data' = this app shows notifications itself from a silent wake-up
+  $caps = preg_replace('/[^a-z,]/', '', strtolower((string)($in['caps'] ?? '')));
+  $pdo->prepare("INSERT INTO k_fcm (kal_id,token,caps,updated_at) VALUES (?,?,?,NOW()) ON DUPLICATE KEY UPDATE caps=VALUES(caps), updated_at=NOW()")
+      ->execute([$me['kal_id'],$tok,$caps]);
   out(true,['registered'=>true]);
 }
 
@@ -752,38 +759,62 @@ function pushTest(PDO $pdo, array $in): void {
   out(true, ['sent' => $result]);
 }
 
-function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $fromKal = '', string $type = 'message', bool $report = false) {
+function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $fromKal = '', string $type = 'message', bool $report = false, array $extra = [], string $exceptToken = '') {
   $sa = fcmServiceAccount();
   if (!$sa) return $report ? ['ok'=>false,'why'=>'no_key_file'] : null;
   try {
-    $st = $pdo->prepare("SELECT token FROM k_fcm WHERE kal_id=?"); $st->execute([$toKal]);
-    $tokens = array_column($st->fetchAll(), 'token');
-    if (!$tokens) return $report ? ['ok'=>false,'why'=>'no_device_registered'] : null;
+    try {
+      $st = $pdo->prepare("SELECT token, caps FROM k_fcm WHERE kal_id=?"); $st->execute([$toKal]);
+    } catch (Throwable $e) {
+      $st = $pdo->prepare("SELECT token, '' AS caps FROM k_fcm WHERE kal_id=?"); $st->execute([$toKal]);
+    }
+    $rows = $st->fetchAll();
+    if (!$rows) return $report ? ['ok'=>false,'why'=>'no_device_registered'] : null;
     $access = fcmAccessToken();
     if (!$access) return $report ? ['ok'=>false,'why'=>'google_auth_failed'] : null;
     $project = defined('FCM_PROJECT_ID') ? FCM_PROJECT_ID : ($sa['project_id'] ?? '');
     if ($project === '') return $report ? ['ok'=>false,'why'=>'no_project_id'] : null;
     $url = 'https://fcm.googleapis.com/v1/projects/'.$project.'/messages:send';
+    $isCall = ($type === 'call' || $type === 'call_end' || $type === 'call_handled');
     $results = [];
-    foreach ($tokens as $t) {
-      $msg = ['message'=>[
-        'token'=>$t,
-        'notification'=>['title'=>$title,'body'=>$body],
-        'android'=>[
-          'priority'=>'high',
-          'ttl'=> ($type === 'call' ? '45s' : '86400s'),
-          'notification'=>[
-            'sound'=>'default',
-            'channel_id'=> ($type === 'call' ? 'kalisi_calls' : 'kalisi_messages_v2'),
+    foreach ($rows as $row) {
+      $t = $row['token'];
+      if ($exceptToken !== '' && hash_equals($t, $exceptToken)) continue;
+      $data = ['type'=>$type,'sender'=>$fromKal,'title'=>$title,'body'=>$body,
+               'click_action'=>'FLUTTER_NOTIFICATION_CLICK'];
+      foreach ($extra as $k => $v) $data[$k] = (string)$v;
+      if (str_contains((string)$row['caps'], 'data')) {
+        // Current app: a silent wake-up. The phone fetches the message,
+        // decrypts it and shows the real text; calls ring full-screen.
+        $msg = ['message'=>[
+          'token'=>$t,
+          'android'=>['priority'=>'high','ttl'=> ($isCall ? '45s' : '86400s')],
+          'data'=>$data,
+        ]];
+      } else {
+        // Older app versions only understand a ready-made notification.
+        if ($type !== 'message' && $type !== 'call') continue;
+        $msg = ['message'=>[
+          'token'=>$t,
+          'notification'=>['title'=>$title,'body'=>$body],
+          'android'=>[
+            'priority'=>'high',
+            'ttl'=> ($type === 'call' ? '45s' : '86400s'),
+            'notification'=>[
+              'sound'=>'default',
+              'channel_id'=> ($type === 'call' ? 'kalisi_calls' : 'kalisi_messages_v2'),
+              'icon'=>'ic_stat_notify',
+              'color'=>'#06BA70',
+            ],
           ],
-        ],
-        'data'=>['type'=>$type,'sender'=>$fromKal,'click_action'=>'FLUTTER_NOTIFICATION_CLICK']
-      ]];
+          'data'=>$data,
+        ]];
+      }
       $ch = curl_init($url);
       curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>6,
         CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$access,'Content-Type: application/json'],
         CURLOPT_POSTFIELDS=>json_encode($msg)]);
-      $body = curl_exec($ch);
+      $resp = curl_exec($ch);
       $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
       $err  = curl_error($ch);
       curl_close($ch);
@@ -798,7 +829,7 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
         } catch (Throwable $e) {}
       }
       $results[] = ['http'=>$code, 'error'=>$err ?: null,
-                    'body'=>$code >= 300 ? substr((string)$body, 0, 300) : null];
+                    'body'=>$code >= 300 ? substr((string)$resp, 0, 300) : null];
     }
     if ($report) {
       return ['ok' => !empty($results) && ($results[0]['http'] ?? 0) === 200,
@@ -809,6 +840,19 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
   }
   return $report ? ['ok'=>false,'why'=>'no_attempts'] : null;
 }
+
+/* Tell my other devices something happened here: a chat was read (clear its
+   notification) or a call was answered/declined (stop ringing). */
+function notifyDevices(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $type = (string)($in['type'] ?? '');
+  if (!in_array($type, ['clear', 'call_handled'], true)) out(false, ['error' => 'bad_type']);
+  $key = substr((string)($in['key'] ?? ''), 0, 40);
+  $except = substr((string)($in['except'] ?? ''), 0, 300);
+  sendPush($pdo, $me['kal_id'], '', '', $me['kal_id'], $type, false, ['key' => $key], $except);
+  out(true, ['sent' => true]);
+}
+
 /* Load the Firebase service account, from api/fcm-key.json if it's there,
    otherwise from an FCM_SA_JSON constant. Returns null when neither exists,
    which simply leaves push disabled. */
@@ -1138,6 +1182,15 @@ function groupSend(PDO $pdo, array $in): void {
   foreach ($members as $mm) {
     if ($mm === $me['kal_id']) continue;
     deliver($pdo, $mm, $me['kal_id'], $cid, $iv, $blob);
+  }
+  // wake members' phones (content stays private)
+  $gn = $pdo->prepare('SELECT name FROM k_groups WHERE gid = ?'); $gn->execute([$gid]);
+  $gname = (string)($gn->fetchColumn() ?: 'Group');
+  $us = $pdo->prepare('SELECT username FROM k_users WHERE kal_id=?'); $us->execute([$me['kal_id']]);
+  $sname = ($u = $us->fetchColumn()) ? '@'.$u : 'Someone';
+  foreach ($members as $mm) {
+    if ($mm === $me['kal_id']) continue;
+    sendPush($pdo, $mm, $gname, $sname.' sent a message', $me['kal_id'], 'message', false, ['group' => $gid]);
   }
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $gid, $cid, $iv, $blob);
   logForward($pdo, $in, $me['kal_id']);
