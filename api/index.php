@@ -161,7 +161,7 @@ function send(PDO $pdo, array $in): void {
   $blob = (string)($in['blob'] ?? '');       // base64 AES-GCM ciphertext — opaque to server
   $iv = (string)($in['iv'] ?? '');
   $cid = substr((string)($in['client_id'] ?? ''), 0, 32); // sender's message id, for receipt matching
-  if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $to) || $blob === '' || strlen($blob) > 900000) out(false, ['error' => 'bad_input']);
+  if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $to) || $blob === '' || strlen($blob) > 10000000) out(false, ['error' => 'bad_input']);
   $st = $pdo->prepare('SELECT 1 FROM k_users WHERE kal_id = ?'); $st->execute([$to]);
   if (!$st->fetch()) out(false, ['error' => 'recipient_not_found']);
   $st = $pdo->prepare('SELECT 1 FROM k_blocks WHERE blocker = ? AND blocked = ?'); $st->execute([$to, $me['kal_id']]);
@@ -197,7 +197,7 @@ function send(PDO $pdo, array $in): void {
       sendPush($pdo, $to, $sname, 'Missed voice call', $me['kal_id'], 'call_end');
     }
     // other call signalling is silent — the app is already awake by then
-  } else {
+  } elseif ($hint !== 'none') {   // 'none': receipts, reactions and other quiet signals
     sendPush($pdo, $to, $sname, 'New message', $me['kal_id']);
   }
   out(true, ['queued' => true]);
@@ -205,6 +205,7 @@ function send(PDO $pdo, array $in): void {
 
 function fetchMsgs(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
+  if ($me['dev'] !== '') deviceIds($pdo, $me['kal_id']);   // drops copies no main login will ever fetch
   $out = ['messages' => [], 'receipts' => []];
 
   // 1) drain my incoming messages, deleting each and issuing a deletion receipt to the sender
@@ -215,7 +216,6 @@ function fetchMsgs(PDO $pdo, array $in): void {
   $rows = $st->fetchAll();
   foreach ($rows as $r) {
     $pdo->prepare('DELETE FROM k_queue WHERE id = ?')->execute([$r['id']]);
-    $receipt = hash('sha256', $r['id'].'|'.$r['payload'].'|'.microtime(true).'|deleted');
     if ($r['peer'] !== '') {
       // a message I sent from another of my devices — "to" says which chat
       $out['messages'][] = ['from' => $r['from_id'], 'to' => $r['peer'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000];
@@ -223,12 +223,7 @@ function fetchMsgs(PDO $pdo, array $in): void {
     }
     // receipt back to the sender once the last device has its copy:
     // proof the relay destroyed every copy (contains no content)
-    $left = $pdo->prepare("SELECT 1 FROM k_queue WHERE to_id = ? AND from_id = ? AND client_id = ? AND peer = '' LIMIT 1");
-    $left->execute([$r['to_id'], $r['from_id'], $r['client_id']]);
-    if (!$left->fetch()) {
-      $ins = $pdo->prepare('INSERT INTO k_receipts (to_id, dev, client_id, receipt, created_at) VALUES (?,?,?,?,NOW())');
-      foreach (deviceIds($pdo, $r['from_id']) as $d) $ins->execute([$r['from_id'], $d, $r['client_id'], $receipt]);
-    }
+    $receipt = issueReceiptIfDone($pdo, $r['to_id'], $r['from_id'], $r['client_id'], (string)$r['id']);
     $out['messages'][] = ['from' => $r['from_id'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000, 'receipt' => $receipt];
   }
 
@@ -493,6 +488,13 @@ function newDeviceSession(PDO $pdo, array $r, string $device): array {
   $name = mb_substr(trim($device), 0, 40) ?: 'Device';
   $pdo->prepare('INSERT INTO k_devices (id, kal_id, token, name, created_at, last_seen) VALUES (?,?,?,?,NOW(),NOW())')
       ->execute([$id, $r['kal_id'], $token, $name]);
+  // everything still waiting for this account (on its other devices, or held
+  // while nothing was signed in) reaches the new device too
+  $pdo->prepare("INSERT INTO k_queue (to_id, dev, from_id, peer, client_id, iv, payload, created_at)
+                 SELECT to_id, ?, from_id, peer, client_id, MIN(iv), MIN(payload), MIN(created_at)
+                 FROM k_queue WHERE to_id = ? AND dev <> ? GROUP BY to_id, from_id, peer, client_id")
+      ->execute([$id, $r['kal_id'], $id]);
+  $pdo->prepare("DELETE FROM k_queue WHERE to_id = ? AND dev = '#hold'")->execute([$r['kal_id']]);
   return [
     'kal_id'       => $r['kal_id'],
     'username'     => $r['username'],
@@ -634,6 +636,15 @@ function deviceRemove(PDO $pdo, array $in): void {
 }
 
 function dropDevice(PDO $pdo, string $id): void {
+  // messages only this device was still holding are kept for the next sign-in
+  $st = $pdo->prepare('SELECT id, to_id, from_id, client_id, peer FROM k_queue WHERE dev = ?');
+  $st->execute([$id]);
+  $other = $pdo->prepare("SELECT 1 FROM k_queue WHERE to_id = ? AND from_id = ? AND client_id = ? AND peer = ? AND dev <> ? LIMIT 1");
+  $hold = $pdo->prepare("UPDATE k_queue SET dev = '#hold' WHERE id = ?");
+  foreach ($st->fetchAll() as $r) {
+    $other->execute([$r['to_id'], $r['from_id'], $r['client_id'], $r['peer'], $id]);
+    if (!$other->fetch()) $hold->execute([$r['id']]);
+  }
   $pdo->prepare('DELETE FROM k_devices WHERE id = ?')->execute([$id]);
   $pdo->prepare('DELETE FROM k_queue WHERE dev = ?')->execute([$id]);
   $pdo->prepare('DELETE FROM k_receipts WHERE dev = ?')->execute([$id]);
@@ -641,6 +652,11 @@ function dropDevice(PDO $pdo, string $id): void {
 
 /* Every device of an account: '' is the phone it was created on, plus any
    device logged in since (unused for 30 days = dropped). */
+/**
+ * Where a copy of each message for this account should go: every device
+ * signed in, plus the account's main login ('') if something still uses it.
+ * With nothing signed in, messages are held ('#hold') for the next sign-in.
+ */
 function deviceIds(PDO $pdo, string $kalId): array {
   static $cache = [];
   if (isset($cache[$kalId])) return $cache[$kalId];
@@ -649,7 +665,43 @@ function deviceIds(PDO $pdo, string $kalId): array {
   foreach (array_column($st->fetchAll(), 'id') as $old) dropDevice($pdo, $old);
   $st = $pdo->prepare('SELECT id FROM k_devices WHERE kal_id = ?');
   $st->execute([$kalId]);
-  return $cache[$kalId] = array_merge([''], array_column($st->fetchAll(), 'id'));
+  $ids = array_column($st->fetchAll(), 'id');
+  if (mainLoginAlive($pdo, $kalId)) array_unshift($ids, '');
+  else pruneMainCopies($pdo, $kalId);
+  return $cache[$kalId] = $ids ?: ['#hold'];
+}
+
+/** The account's original login token was used in the last 30 days. */
+function mainLoginAlive(PDO $pdo, string $kalId): bool {
+  $st = $pdo->prepare('SELECT main_seen FROM k_users WHERE kal_id = ?');
+  $st->execute([$kalId]);
+  $t = $st->fetchColumn();
+  return $t && strtotime($t) > time() - 30 * 86400;
+}
+
+/**
+ * Copies waiting for a main login nobody uses any more: drop them, and tell
+ * the sender a message is delivered if that was its last waiting copy (the
+ * other devices already took theirs).
+ */
+function pruneMainCopies(PDO $pdo, string $kalId): void {
+  $st = $pdo->prepare("SELECT id, from_id, client_id FROM k_queue WHERE to_id = ? AND dev = '' AND peer = ''");
+  $st->execute([$kalId]);
+  $rows = $st->fetchAll();
+  if (!$rows) return;
+  $pdo->prepare("DELETE FROM k_queue WHERE to_id = ? AND dev = ''")->execute([$kalId]);
+  foreach ($rows as $r) issueReceiptIfDone($pdo, $kalId, $r['from_id'], $r['client_id'], (string)$r['id']);
+}
+
+/** Once no copy of a message is waiting anywhere, tell the sender it arrived. */
+function issueReceiptIfDone(PDO $pdo, string $to, string $from, string $cid, string $salt): string {
+  $left = $pdo->prepare("SELECT 1 FROM k_queue WHERE to_id = ? AND from_id = ? AND client_id = ? AND peer = '' LIMIT 1");
+  $left->execute([$to, $from, $cid]);
+  if ($left->fetch()) return '';
+  $receipt = hash('sha256', $salt . '|' . $cid . '|' . microtime(true) . '|deleted');
+  $ins = $pdo->prepare('INSERT INTO k_receipts (to_id, dev, client_id, receipt, created_at) VALUES (?,?,?,?,NOW())');
+  foreach (deviceIds($pdo, $from) as $d) if ($d !== '#hold') $ins->execute([$from, $d, $cid, $receipt]);
+  return $receipt;
 }
 
 /* Queue one copy per device of the recipient. */
@@ -1539,7 +1591,7 @@ function groupSend(PDO $pdo, array $in): void {
   $iv = (string)($in['iv'] ?? '');
   $blob = (string)($in['blob'] ?? '');
   $cid = substr((string)($in['client_id'] ?? ''), 0, 32);
-  if ($blob === '' || strlen($blob) > 900000) out(false, ['error' => 'bad_input']);
+  if ($blob === '' || strlen($blob) > 10000000) out(false, ['error' => 'bad_input']);
   groupMigrate($pdo);
   $st = $pdo->prepare('SELECT * FROM k_groups WHERE gid = ?'); $st->execute([$gid]);
   $g = $st->fetch();
@@ -1575,9 +1627,13 @@ function auth(PDO $pdo, array $in): array {
   $kid = strtoupper(trim((string)($in['kal_id'] ?? '')));
   $token = (string)($in['token'] ?? '');
   if ($kid === '' || $token === '') out(false, ['error' => 'auth_required']);
-  $st = $pdo->prepare("SELECT kal_id, disabled, '' AS dev FROM k_users WHERE kal_id = ? AND token = ?");
+  $st = $pdo->prepare("SELECT kal_id, disabled, '' AS dev, main_seen FROM k_users WHERE kal_id = ? AND token = ?");
   $st->execute([$kid, $token]);
   $u = $st->fetch();
+  if ($u && (empty($u['main_seen']) || strtotime($u['main_seen']) < time() - 600)) {
+    // the original login is in use: it keeps getting copies of messages
+    $pdo->prepare('UPDATE k_users SET main_seen = NOW() WHERE kal_id = ?')->execute([$kid]);
+  }
   if (!$u) {
     $st = $pdo->prepare('SELECT u.kal_id, u.disabled, d.id AS dev FROM k_devices d
                          JOIN k_users u ON u.kal_id = d.kal_id WHERE d.kal_id = ? AND d.token = ?');
@@ -1611,6 +1667,11 @@ function migrate(PDO $pdo): void {
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN email VARCHAR(254) NULL"); } catch (Throwable $e) {}
   // the username the account key was derived from (it stays when the @username changes)
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN key_username VARCHAR(20) NULL"); } catch (Throwable $e) {}
+  // when the account's original login token was last used (see deviceIds)
+  try {
+    $pdo->exec("ALTER TABLE k_users ADD COLUMN main_seen DATETIME NULL");
+    $pdo->exec("UPDATE k_users SET main_seen = last_seen");   // existing accounts: assume in use
+  } catch (Throwable $e) {}
   // usernames can now be up to 30 characters
   try { $pdo->exec("ALTER TABLE k_users MODIFY username VARCHAR(32) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
   try { $pdo->exec("ALTER TABLE k_users MODIFY key_username VARCHAR(32) NULL"); } catch (Throwable $e) {}

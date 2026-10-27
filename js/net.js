@@ -78,13 +78,34 @@ async function connectReal(handle){
 
 /* ---- outgoing ---- */
 async function netSend(c,m){
-  const body={kind:m.kind,text:m.text,img:m.img||null,audio:m.audio||null,wave:m.wave||null,dur:m.dur||0,burn:!!m.burn,replyTo:m.replyTo||null,cid:m.id,ts:m.ts,timer:chat(c.id).timer||0};
+  const body={kind:m.kind,text:m.text,img:m.img||null,audio:m.audio||null,file:m.file||null,fileName:m.fileName||null,fileSize:m.fileSize||null,
+    wave:m.wave||null,dur:m.dur||0,burn:!!m.burn,replyTo:m.replyTo||null,cid:m.id,ts:m.ts,timer:chat(c.id).timer||0};
   const enc=await encryptFor(c,body);
   await api('send',{...authBody(),to:c.kalId,client_id:m.id,...enc,echo:1});
 }
+/* typing / live typing: only reaches them while they're online, no notification */
+async function netSendLive(c,obj){
+  try{ const enc=await encryptFor(c,{...obj,cid:'lv'+uid(),ts:now()});
+    await api('send',{...authBody(),to:c.kalId,client_id:'lv'+uid(),live:1,...enc}); }catch(e){}
+}
+/* messages that couldn't be sent (offline) go out on the next poll */
+let _retrying=false;
+async function retryFailed(){
+  if(_retrying||!S||!S.data)return; _retrying=true;
+  try{
+    for(const c of D().contacts||[]){
+      if(!c.real||c.isGroup)continue;
+      for(const m of (chat(c.id).msgs||[])){
+        if(m.from!=='me'||(m.status!=='failed'&&m.status!=='sending'))continue;
+        if(m.status==='sending'&&now()-m.ts<15000)continue;   // still on its way
+        try{ await netSend(c,m); m.status='sent'; save(); if(curChat===c.id)renderMsgs(false); }catch(e){ m.status='failed'; break; }
+      }
+    }
+  }finally{ _retrying=false; }
+}
 async function netSendCtl(c,obj){ // control messages: read receipts, burn acks — also encrypted
   const enc=await encryptFor(c,obj);
-  await api('send',{...authBody(),to:c.kalId,client_id:'ctl'+uid(),...enc}).catch(()=>{});
+  await api('send',{...authBody(),to:c.kalId,client_id:'ctl'+uid(),push:'none',...enc}).catch(()=>{});
 }
 
 /* ---- polling ---- */
@@ -137,7 +158,7 @@ async function pollOnce(){
   let changed=false;
   for(const r of res.receipts){ // relay deleted its copy of my sent message
     for(const cid in D().chats){ const m=D().chats[cid].msgs.find(x=>x.id===r.client_id);
-      if(m){ if(m.status==='sent')m.status='delivered'; m.receipt=r.receipt.slice(0,16); changed=true; } }
+      if(m){ if(m.status==='sent'||m.status==='sending'||m.status==='failed')m.status='delivered'; m.receipt=r.receipt.slice(0,16); changed=true; } }
   }
   for(const pkt of res.messages){
     // something I sent from my phone / another browser — show it here too
@@ -182,17 +203,25 @@ async function pollOnce(){
       if(m){ m.reactions=m.reactions||{}; if(body.emoji)m.reactions.them=body.emoji; else delete m.reactions.them; }
       continue;
     }
-    if(body.kind==='typing'||body.kind==='draft'){ // peer is typing (the app may also send the words)
+    if(body.kind==='typing'||body.kind==='draft'){ // peer is typing (live typing also sends the words)
+      if(now()-(body.ts||now())>15000)continue;      // stale, sat in the queue
+      if(body.kind==='draft'){
+        c._draft=body.text||''; clearTimeout(c._draftT);
+        if(c._draft) c._draftT=setTimeout(()=>{ c._draft=''; if(curChat===c.id)renderMsgs(false); },8000);
+        if(curChat===c.id)renderMsgs(true);
+      }
       if(curChat===c.id && typeof setSub==='function' && (body.kind==='typing'||body.text)){
-        setSub('typing…',true); clearTimeout(c._typingT);
-        c._typingT=setTimeout(()=>{ if(curChat===c.id){ setSub(''); if(typeof fetchPresence==='function')fetchPresence(c); } },5000);
+        window._typingFrom=c.id; setSub('typing…',true); clearTimeout(c._typingT);
+        c._typingT=setTimeout(()=>{ window._typingFrom=null; if(curChat===c.id){ setSub(''); if(typeof fetchPresence==='function')fetchPresence(c); } },5000);
       }
       continue;
     }
     // anything else that isn't a message (call signals, receipts…) is not shown
     if(!['text','img','voice','file'].includes(body.kind)){ continue; }
+    c._draft='';   // the real message replaces the live preview
     const ch=chat(c.id);
     const m={id:body.cid||uid(),from:'them',kind:body.kind,text:body.text||'',img:body.img||null,
+             file:body.file||null,fileName:body.fileName||null,fileSize:body.fileSize||null,
              audio:body.audio||null,wave:body.wave||null,dur:body.dur||0,
              ts:body.ts||pkt.ts,status:'read',burn:!!body.burn,replyTo:body.replyTo||null};
     if(body.timer)m.expireAt=now()+body.timer*1000;
@@ -205,6 +234,7 @@ async function pollOnce(){
     if(m.expireAt)scheduleExpiry(m,c.id);
   }
   if(changed){ save(); if(curChat)renderMsgs(true); renderChats(); }
+  retryFailed();
   // periodically refresh contact requests (every ~4th poll)
   refreshRequests();
   if(typeof autoBackup==='function')autoBackup();  // throttled to once/30min, app only
@@ -219,10 +249,11 @@ async function handleMyEcho(pkt){
   if(!c){ try{ c=await connectReal(pkt.to); }catch(e){ return false; } }
   // same shared key both ways: my key + their public key
   let body; try{ body=await decryptFrom(c,pkt.iv,pkt.blob); }catch(e){ return false; }
-  if(!['text','img','voice'].includes(body.kind))return false;
+  if(!['text','img','voice','file'].includes(body.kind))return false;
   const ch=chat(c.id);
   if(ch.msgs.some(x=>x.id===body.cid))return false;
   ch.msgs.push({id:body.cid||uid(),from:'me',kind:body.kind,text:body.text||'',img:body.img||null,
+    file:body.file||null,fileName:body.fileName||null,fileSize:body.fileSize||null,
     audio:body.audio||null,wave:body.wave||null,dur:body.dur||0,ts:body.ts||pkt.ts,status:'sent',
     burn:!!body.burn,replyTo:body.replyTo||null});
   ch.msgs.sort((a,b)=>a.ts-b.ts);
