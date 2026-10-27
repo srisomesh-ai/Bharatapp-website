@@ -1,4 +1,4 @@
-/* ============ Kalisi status (24h stories) ============ */
+/* ============ BharatApp status (24h stories) ============ */
 let _statusFeed=[];
 
 function openStatusTab(){

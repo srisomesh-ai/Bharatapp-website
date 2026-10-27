@@ -1,4 +1,4 @@
-/* ============ Kalisi screenshot protection (#5) ============ */
+/* ============ BharatApp screenshot protection (#5) ============ */
 /* In the Flutter app: signals native FLAG_SECURE (real OS-level block).
    On web: best-effort deterrents only — true blocking is impossible in a browser. */
 
