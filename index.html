@@ -28,7 +28,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=3.0">
+<link rel="stylesheet" href="css/app.css?v=3.1">
 <link rel="stylesheet" href="css/landing-voice.css?v=3.0">
 <link rel="stylesheet" href="css/features.css?v=3.0">
 </head>
@@ -186,33 +186,33 @@
         <button class="btn ghost" style="margin-top:10px" onclick="showLogin()">I already have an account — log in</button>
       </div>
       <div id="ob-login" class="hide">
-        <h1 class="ob-h1">Welcome <em>back.</em></h1>
-        <p class="ob-note" style="text-align:left;margin:0 0 16px">Enter your @username and the Gmail you signed up with. If they match, we'll email you a code.</p>
-        <div class="field">
-          <label for="lg-user">Your @username</label>
-          <input id="lg-user" maxlength="21" placeholder="e.g. somu" autocomplete="username" autocapitalize="none" style="font-family:var(--mono)">
-        </div>
-        <div class="field" style="margin-top:12px">
-          <label for="lg-email">Your Gmail</label>
-          <div style="display:flex;gap:8px">
-            <input id="lg-email" type="email" maxlength="80" placeholder="you@gmail.com" autocomplete="email" autocapitalize="none">
-            <button class="btn ghost" id="lg-send-code" style="width:auto;flex:none;margin:0;padding:0 14px" onclick="lgSendCode()">Send code</button>
+        <div class="lg-card">
+          <h1 class="ob-h1">Welcome <em>back.</em></h1>
+          <p class="lg-sub">Log in with your @username and password.</p>
+          <form onsubmit="lgLogin();return false" autocomplete="on">
+            <div class="field">
+              <label for="lg-user">Username</label>
+              <input id="lg-user" maxlength="21" placeholder="@username" autocomplete="username" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label for="lg-pass">Password</label>
+              <input id="lg-pass" type="password" maxlength="100" placeholder="Password" autocomplete="current-password">
+            </div>
+            <div id="lg-step2" class="hide">
+              <div class="lg-newdev">New device — we sent a 6-digit code to <b id="lg-hint">your Gmail</b>. You only need it the first time on this browser.</div>
+              <div class="field">
+                <label for="lg-code">Code from your Gmail</label>
+                <input id="lg-code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code" style="font-family:var(--mono);letter-spacing:.3em">
+              </div>
+            </div>
+            <button class="btn hero-start" id="lg-go" type="submit" style="margin-top:16px">Log in</button>
+          </form>
+          <p class="ob-note" id="lg-msg"></p>
+          <div class="lg-links">
+            <button class="lg-link" onclick="landStart()">New here? Create an account</button>
+            <button class="lg-link" onclick="restorePick()">Restore from a backup file</button>
           </div>
         </div>
-        <div id="lg-step2" class="hide">
-          <div class="field" style="margin-top:12px">
-            <label for="lg-code">6-digit code from your email</label>
-            <input id="lg-code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code" style="font-family:var(--mono);letter-spacing:.3em">
-          </div>
-          <div class="field" style="margin-top:12px">
-            <label for="lg-pass">Your password</label>
-            <input id="lg-pass" type="password" maxlength="100" placeholder="Password" autocomplete="current-password">
-          </div>
-          <button class="btn" id="lg-go" style="margin-top:14px" onclick="lgLogin()">Log in</button>
-        </div>
-        <p class="ob-note" id="lg-msg"></p>
-        <button class="btn ghost" style="margin-top:10px" onclick="landStart()">New here? Create an account</button>
-        <button class="btn ghost" style="margin-top:8px" onclick="restorePick()">Restore from a backup file</button>
       </div>
       <div id="ob-step2" class="hide">
         <h1 class="ob-h1">This is <em>you.</em></h1>
@@ -418,7 +418,7 @@
 <script src="js/net.js?v=2.9"></script>
 <script src="js/pwkey.js?v=2.9"></script>
 <script src="js/voice.js?v=2.9"></script>
-<script src="js/landing.js?v=2.9"></script>
+<script src="js/landing.js?v=3.1"></script>
 <script src="js/secure.js?v=2.9"></script>
 <script src="js/dialog.js?v=2.9"></script>
 <script src="js/notify.js?v=2.9"></script>

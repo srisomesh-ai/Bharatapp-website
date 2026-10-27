@@ -93,58 +93,64 @@ function landStart(fromHistory){
 
 function landRestore(){ showLogin(); }
 
-/* ---- log in: @username + Gmail must match → code by email → password ---- */
+/* ---- log in: @username + password. A new browser is asked once for a code
+   sent to the account's Gmail; after that this browser is trusted. ---- */
 function showLogin(fromHistory){
   if(fromHistory!==true)_pushScreen('login');
   document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
   $('scr-onboard').classList.add('on');
   $('ob-step1').classList.add('hide'); $('ob-step2').classList.add('hide');
   $('ob-login').classList.remove('hide');
+  $('lg-step2').classList.add('hide'); $('lg-code').value=''; lgMsg('');
   setTimeout(()=>$('lg-user')?.focus(),200);
 }
 const _lgUser=()=>($('lg-user').value||'').trim().replace(/^@/,'').toLowerCase();
-const _lgEmail=()=>($('lg-email').value||'').trim();
 function lgMsg(t){ $('lg-msg').textContent=t||''; }
-const LOGIN_ERR={no_match:"That @username and Gmail don't match an account",bad_email:'Enter a valid Gmail address',
-  bad_username:'Check the username',too_soon:'Wait a minute before asking for another code',
-  too_many:'Too many tries — try again in an hour',email_send_failed:'Could not send the email — try again',
-  wrong_code:'Wrong code — check your email',code_expired:'Code expired — tap Send code again',
+const LOGIN_ERR={wrong_password:'Wrong username or password',bad_input:'Enter your username and password',
+  no_recovery:'This account has no password, so it can only be opened on the phone it was made on',
+  too_soon:'Wait a minute before asking for another code',
+  too_many:'Too many tries — try again later',email_send_failed:'Could not send the email — try again',
+  wrong_code:'Wrong code — check your Gmail',code_expired:'Code expired — tap Log in again for a new one',
   account_disabled:'This account has been disabled'};
-async function lgSendCode(){
-  if(!/^[a-z0-9_]{3,20}$/.test(_lgUser())){lgMsg('Enter your @username');return;}
-  if(!/^[^@\s]+@(gmail|googlemail)\.com$/i.test(_lgEmail())){lgMsg('Enter your Gmail address');return;}
-  const b=$('lg-send-code'); b.disabled=true; lgMsg('Sending…');
-  try{
-    await api('login_otp_send',{username:_lgUser(),email:_lgEmail()});
-    $('lg-step2').classList.remove('hide'); $('lg-code').focus();
-    lgMsg('Code sent — check your Gmail');
-  }catch(e){ lgMsg(LOGIN_ERR[e.message]||'Could not send code'); }
-  setTimeout(()=>{b.disabled=false;},30000);
-}
+const _trustKey=u=>'bharatapp_trust_'+u;
+function _getTrust(u){ try{ return localStorage.getItem(_trustKey(u))||''; }catch(e){ return ''; } }
+function _setTrust(u,t){ try{ localStorage.setItem(_trustKey(u),t); }catch(e){} }
+let _lgKeys=null; // {u,pass,keys,verifier} — so the code step doesn't redo the slow key maths
 async function lgLogin(){
-  const u=_lgUser(), email=_lgEmail(), code=($('lg-code').value||'').trim(), pass=$('lg-pass').value;
-  if(!/^\d{6}$/.test(code)){lgMsg('Enter the 6-digit code');return;}
+  const u=_lgUser(), pass=$('lg-pass').value, code=($('lg-code').value||'').trim();
+  if(!/^[a-z0-9_]{3,20}$/.test(u)){lgMsg('Enter your @username');return;}
   if(!pass){lgMsg('Enter your password');return;}
+  const codeStep=!$('lg-step2').classList.contains('hide');
+  if(codeStep && !/^\d{6}$/.test(code)){lgMsg('Enter the 6-digit code from your Gmail');return;}
   const go=$('lg-go'); go.disabled=true; lgMsg('Checking…');
   try{
-    // 1) rebuild the account key from the password and check it against the
-    //    account's public key — before using up the code
-    let salt, keyUser=u;
-    try{ const rs=await api('recover_salt',{username:u}); salt=rs.salt; keyUser=rs.key_username||u; }
-    catch(e){ lgMsg(e.message==='no_recovery'?'This account has no password, so it can only be opened on the phone it was made on':'Could not check the account'); return; }
-    // the key was made with the username the account had then
-    const keys=await keyFromPassword(keyUser,pass,salt);
-    const {user}=await api('lookup',{handle:u});
-    if(user.pubkey?.x!==keys.pub.x||user.pubkey?.y!==keys.pub.y){ lgMsg('Wrong password'); return; }
-    // 2) the code logs this browser in as one more device
+    if(!_lgKeys||_lgKeys.u!==u||_lgKeys.pass!==pass){
+      let rs;
+      try{ rs=await api('recover_salt',{username:u}); }
+      catch(e){ lgMsg(e.message==='no_recovery'?LOGIN_ERR.no_recovery:LOGIN_ERR.wrong_password); return; }
+      // the key was made with the username the account had at sign-up
+      const keyUser=rs.key_username||u;
+      const keys=await keyFromPassword(keyUser,pass,rs.salt);
+      const verifier=await verifierFor(keyUser,pass,rs.salt);
+      _lgKeys={u,pass,keys,verifier};
+    }
     const dev=(navigator.userAgentData?.platform||navigator.platform||'Browser')+' · web';
-    const r=await api('login_otp_verify',{username:u,email,code,device:dev});
+    const r=await api('login_password',{username:u,verifier:_lgKeys.verifier,device:dev,
+      trust:_getTrust(u),code:codeStep?code:''});
+    if(r.need_code){
+      $('lg-hint').textContent=r.email_hint||'your Gmail';
+      $('lg-step2').classList.remove('hide'); $('lg-code').focus();
+      lgMsg(''); return;
+    }
+    if(r.trust)_setTrust(u,r.trust);
+    const keys=_lgKeys.keys; _lgKeys=null;
     const ident=seedIdentity(r.name||u,{kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv},false);
     ident.device=true; save();
+    $('lg-pass').value=''; $('lg-code').value=''; $('lg-step2').classList.add('hide');
     lgMsg('');
     await loadContactsAfterLogin();
     showApp();
-  }catch(e){ lgMsg(LOGIN_ERR[e.message]||'Could not log in'); }
+  }catch(e){ lgMsg(LOGIN_ERR[e.message]||'Could not log in — check your internet'); }
   finally{ go.disabled=false; }
 }
 /* bring in everyone this account is connected with, so the chat list isn't empty */
