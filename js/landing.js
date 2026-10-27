@@ -4,12 +4,42 @@
 function isNativeApp(){
   return /KalisiApp/i.test(navigator.userAgent) || location.search.indexOf('app=1')>=0 || window.KalisiNative || window.KalisiBundled || location.protocol==='file:';
 }
+/* ---- invite links (what the QR holds): kalisi.app/add/<username> ---- */
+const PLAY_URL='https://play.google.com/store/apps/details?id=com.messenger.app';
+function inviteLink(username){ return 'https://kalisi.app/add/'+username; }
+/* Returns true when the page was opened from an invite and handled it. */
+function handleInvite(){
+  const u=(new URLSearchParams(location.search).get('add')||'').toLowerCase();
+  if(!/^[a-z0-9_]{3,20}$/.test(u))return false;
+  history.replaceState(null,'',location.pathname);
+  // Android: open the app if it's installed, otherwise the Play Store
+  if(/Android/i.test(navigator.userAgent)&&!isNativeApp()){
+    location.href='intent://add/'+u+'#Intent;scheme=kalisi;package=com.messenger.app;S.browser_fallback_url='+encodeURIComponent(PLAY_URL)+';end';
+  }
+  showInvite(u);
+  return true;
+}
+function showInvite(u){
+  const signedIn=!!(S&&S.identities&&S.identities.length&&me()?.token);
+  kConfirm({title:'Chat with @'+u+' on Kalisi',
+    message:signedIn?'Send @'+u+' a contact request? You can chat once they accept.'
+                    :'Get the Kalisi app to connect with @'+u+', or create an account here in your browser.',
+    okText:signedIn?'Connect':'Get it on Google Play', cancelText:signedIn?'Not now':'Use in browser'})
+  .then(async ok=>{
+    if(!signedIn){ if(ok){ location.href=PLAY_URL; } else { window._pendingInvite=u; landStart(); } return; }
+    if(!ok)return;
+    try{ const c=await connectReal(u); await api('req_send',{...authBody(),to:c.kalId}); toast('Request sent to @'+u); }
+    catch(e){ toast(e.message==='not_found'?'No user found with @'+u:'Could not connect'); }
+  });
+}
 function bootRoute(){
+  const invited=handleInvite();
   if(S && S.identities && S.identities.length){
     // existing account on this device → straight to app
     showApp();
     return true;
   }
+  if(invited)return false;   // the invite dialog decides where to go
   if(isNativeApp()){
     // inside the Android app: no marketing landing — go straight to create/login
     document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
@@ -104,4 +134,6 @@ function showApp(){
   if(typeof refreshRequests==='function')refreshRequests();
   if(typeof requestNotifPermission==='function')requestNotifPermission();
   if(typeof registerFCM==='function')registerFCM();
+  // signed up from an invite link → offer to connect now
+  if(window._pendingInvite&&me()?.token){ const u=window._pendingInvite; window._pendingInvite=null; setTimeout(()=>showInvite(u),400); }
 }

@@ -233,7 +233,7 @@ function renderConnect(){
       <div class="lnk" id="invite-link"></div>
       <div class="ttl" id="invite-ttl">10:00</div>
     </div>`;
-  drawQR('qr-slot',handleOf(m));
+  drawQR('qr-slot',m.username?inviteLink(m.username):handleOf(m));
   renderRequestsInbox();
 }
 function drawQR(slotId,text){
@@ -252,7 +252,8 @@ function openMyQR(){
       <div class="qr-wrap" id="qr-slot2"></div>
       <div class="qr-sub">${esc(m.name)} · persona created ${fmtDay(m.created)}</div>
     </div>`;
-  openSheet('sheet-qr'); drawQR('qr-slot2',handleOf(m));
+  // a link: opens the app and connects — or the Play Store if it isn't installed
+  openSheet('sheet-qr'); drawQR('qr-slot2',m.username?inviteLink(m.username):handleOf(m));
 }
 function simulateScan(){
   const names=[['Anil K','#5FC9C9','priya'],['Suresh V','#B58CF0','ravi'],['Deepika','#E4A05F','priya'],['Karthik','#59C98D','ravi']];
