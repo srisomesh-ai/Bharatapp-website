@@ -28,7 +28,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Newsreader:opsz,wght@6..72,500&family=Noto+Serif+Devanagari:wght@600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=3.4">
+<link rel="stylesheet" href="css/app.css?v=3.6">
 <link rel="stylesheet" href="css/landing-voice.css?v=3.0">
 <link rel="stylesheet" href="css/landing.css?v=14">
 <link rel="stylesheet" href="css/features.css?v=3.0">
@@ -345,11 +345,7 @@
         <button class="icon-btn" onclick="clearReply()" style="width:30px;height:30px">✕</button>
       </div>
       <div id="composer-main">
-        <div class="comp-row">
-          <button id="burn-toggle" onclick="toggleBurn()" title="Burn on read">🔥</button>
-          <button id="attach-btn" onclick="document.getElementById('img-in').click()" aria-label="Attach photo">
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="15" rx="3"/><circle cx="9" cy="11" r="2"/><path d="m5 19 5.5-5.5L14 17l3-3 4 4"/></svg>
-          </button>
+        <div class="cx-box">
           <textarea id="msg-in" rows="1" placeholder="Message"></textarea>
           <button id="mic-btn" onclick="startRec()" aria-label="Record voice">
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg>
@@ -358,6 +354,21 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21.8 12 3.4 3.6l2.8 6.9 9.3 1.5-9.3 1.5-2.8 6.9Z"/></svg>
           </button>
         </div>
+        <div class="cx-tools">
+          <button class="cx-t" onclick="toggleAttach()" aria-label="Attach" title="Attach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="cx-t" onclick="toggleEmoji()" aria-label="Emoji" title="Emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 2 3.5 2 3.5-2 3.5-2M9 9.5h.01M15 9.5h.01"/></svg></button>
+          <button class="cx-t" id="burn-toggle" onclick="toggleBurn()" aria-label="Burn on read" title="Burn on read">🔥</button>
+          <span class="cx-sep"></span>
+          <button class="cx-t" onclick="$('img-in').click()" aria-label="Photo" title="Photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="15" rx="3"/><circle cx="9" cy="11" r="2"/><path d="m5 19 5.5-5.5L14 17l3-3 4 4"/></svg></button>
+          <button class="cx-t" onclick="$('doc-in').click()" aria-label="Document" title="Document"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></button>
+          <button class="cx-t" onclick="$('vid-in').click()" aria-label="Video" title="Video"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+        </div>
+        <div class="cx-pop" id="attach-pop">
+          <button onclick="$('img-in').click();toggleAttach()">🖼️ Photo</button>
+          <button onclick="$('doc-in').click();toggleAttach()">📄 Document</button>
+          <button onclick="$('vid-in').click();toggleAttach()">🎬 Video</button>
+        </div>
+        <div class="cx-pop cx-emoji" id="emoji-pop"></div>
         <div id="burn-hint">🔥 Burn-on-read is ON — this message destroys itself after being viewed once.</div>
       </div>
       <div id="rec-bar">
@@ -369,6 +380,8 @@
         </button>
       </div>
       <input type="file" id="img-in" accept="image/*" class="hide" onchange="sendImage(this)">
+      <input type="file" id="doc-in" class="hide" onchange="sendFile(this)">
+      <input type="file" id="vid-in" accept="video/*" class="hide" onchange="sendFile(this)">
     </div>
   </div>
 
@@ -444,19 +457,19 @@
 
 
 <script src="js/qrcode.js?v=2.9"></script>
-<script src="js/net.js?v=3.5"></script>
+<script src="js/net.js?v=3.7"></script>
 <script src="js/pwkey.js?v=2.9"></script>
 <script src="js/voice.js?v=2.9"></script>
-<script src="js/landing.js?v=3.5"></script>
+<script src="js/landing.js?v=3.7"></script>
 <script src="js/secure.js?v=2.9"></script>
 <script src="js/dialog.js?v=2.9"></script>
 <script src="js/notify.js?v=2.9"></script>
 <script src="js/requests.js?v=2.9"></script>
-<script src="js/settings.js?v=3.5"></script>
+<script src="js/settings.js?v=3.7"></script>
 <script src="js/block.js?v=2.9"></script>
 <script src="js/status.js?v=2.9"></script>
 <script src="js/groups.js?v=2.9"></script>
-<script src="js/app.js?v=3.5"></script>
+<script src="js/app.js?v=3.7"></script>
 <script src="js/site.js?v=1"></script>
 <script>document.getElementById('lp-year').textContent=new Date().getFullYear()</script>
 </body>

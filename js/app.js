@@ -467,6 +467,8 @@ function openChat(cid){
   else { setSub(); fetchPresence(c); }
   // header menu button
   const hm=$('chat-header-menu'); if(hm)hm.onclick=()=>openChatMenu(cid);
+  // tap the name or photo for the info panel, as in WhatsApp
+  for(const id of ['chat-avatar','chat-name']){ const el=$(id); if(el){ el.style.cursor='pointer'; el.onclick=()=>c.isGroup?showGroupInfo(cid):showContactInfo(cid); } }
   $('scr-main').classList.remove('on'); $('scr-chat').classList.add('on');
   renderChats();   // highlight the open chat in the side list (PC layout)
   renderMsgs(true);
@@ -503,7 +505,8 @@ function openChatMenu(cid){
     items=`<div class="menu-it" onclick="closeSheets();showGroupInfo('${cid}')">👥 &nbsp;Group info</div>`;
   }else{
     const blocked=isBlocked(c.kalId);
-    items=blocked
+    items=`<div class="menu-it" onclick="closeSheets();showContactInfo('${cid}')">👤 &nbsp;Contact info</div>`;
+    items+=blocked
       ? `<div class="menu-it" onclick="unblockContact('${c.kalId}');closeSheets()">✅ &nbsp;Unblock ${esc(handleOf(c))}</div>`
       : `<div class="menu-it red" onclick="blockContact('${cid}')">🚫 &nbsp;Block ${esc(handleOf(c))}</div>`;
   }
@@ -536,27 +539,78 @@ async function deleteChat(cid){
   renderChats();
   toast(name+' deleted');
 }
+/* Info panels, laid out like WhatsApp's: who, media, settings, then the red actions. */
+function mediaSummary(cid){
+  const msgs=(chat(cid).msgs||[]).filter(m=>!m.burn);
+  const photos=msgs.filter(m=>m.kind==='img'&&m.img).reverse();
+  const docs=msgs.filter(m=>m.kind==='file').length;
+  const links=msgs.filter(m=>(!m.kind||m.kind==='text')&&/https?:\/\//.test(m.text||'')).length;
+  const pl=(n,w)=>n+' '+w+(n===1?'':'s');
+  const strip=photos.slice(0,12).map(m=>`<img class="info-ph" src="${esc(m.img)}" alt="">`).join('');
+  return `<div class="pcard"><div class="ph">Media, links and docs</div>`+
+    (strip?`<div class="info-strip">${strip}</div>`:'')+
+    `<div class="ps">${pl(photos.length,'photo')} · ${pl(docs,'document')} · ${pl(links,'link')}</div></div>`;
+}
+const ENC_COPY='Messages are end-to-end encrypted. BharatApp Chat never saves your history.';
+function showContactInfo(cid){
+  const c=contact(cid); if(!c)return;
+  const blocked=isBlocked(c.kalId);
+  const groups=D().contacts.filter(g=>g.isGroup&&(g.members||[]).includes(c.kalId));
+  $('msginfo-body').innerHTML=`<div class="info-head">${avatarHTML(c,'big')}<h2>${esc(c.name)}</h2>`+
+    `<p class="sub">${esc(handleOf(c)||'')}</p></div>`+
+    `<div class="pcard"><div class="ph">About</div>`+
+      `<div class="prow"><span class="k">Username</span><span>${esc(handleOf(c)||'—')}</span></div>`+
+      (c.kalId?`<div class="prow"><span class="k">BharatApp Chat ID</span><span>${esc(c.kalId)}</span></div>`:'')+`</div>`+
+    mediaSummary(cid)+
+    `<div class="pcard"><div class="ph">🔒 Encryption</div><div class="ps">${ENC_COPY}</div></div>`+
+    (groups.length?`<div class="pcard"><div class="ph">${groups.length} group${groups.length===1?'':'s'} in common</div>`+
+      groups.map(g=>`<div class="prow"><span>${esc(g.name)}</span></div>`).join('')+`</div>`:'')+
+    `<div class="pcard">`+
+      (blocked?`<div class="prow info-act" onclick="unblockContact('${c.kalId}');closeSheets()">✅ Unblock ${esc(handleOf(c))}</div>`
+              :`<div class="prow info-act red" onclick="blockContact('${cid}')">🚫 Block ${esc(handleOf(c))}</div>`)+
+      `<div class="prow info-act red" onclick="clearChatMsgs('${cid}')">🧹 Clear messages</div>`+
+      `<div class="prow info-act red" onclick="deleteChat('${cid}')">🗑 Delete chat</div></div>`;
+  openSheet('sheet-msginfo');
+}
 function showGroupInfo(cid){
   const c=contact(cid);
-  const names=Object.entries(c.memberNames||{}).map(([k,n])=>`<div class="prow"><span class="k">${esc(n)}</span></div>`).join('');
-  $('msginfo-body').innerHTML=`<h2>${esc(c.name)}</h2><p class="sub">${(c.members||[]).length} members</p><div class="pcard">${names}</div>`;
+  const names=Object.entries(c.memberNames||{}).map(([k,n])=>`<div class="prow"><span>${esc(n)}</span></div>`).join('');
+  $('msginfo-body').innerHTML=`<div class="info-head">${avatarHTML(c,'big')}<h2>${esc(c.name)}</h2>`+
+    `<p class="sub">Group · ${(c.members||[]).length} members</p></div>`+
+    mediaSummary(cid)+
+    `<div class="pcard"><div class="ph">🔒 Encryption</div><div class="ps">Messages are end-to-end encrypted with a key shared by the members. BharatApp Chat never saves your history.</div></div>`+
+    `<div class="pcard"><div class="ph">${(c.members||[]).length} members</div>${names}</div>`+
+    `<div class="pcard"><div class="prow info-act red" onclick="clearChatMsgs('${cid}')">🧹 Clear messages</div>`+
+    `<div class="prow info-act red" onclick="deleteChat('${cid}')">🗑 Delete chat</div></div>`;
   openSheet('sheet-msginfo');
 }
 function closeChat(){ $('scr-chat').classList.remove('on'); $('scr-main').classList.add('on'); curChat=null; renderChats(); }
+/* how far my message got: ◌ sending, ○ sent, ● delivered, green ● + green
+   bubble edge = read, ! = not sent (it is retried automatically) */
 function ticks(m){
   if(m.from!=='me')return '';
-  const t=m.status==='sent'?'✓':'✓✓';
-  return `<span class="tick ${m.status==='read'?'read':''}">${t}</span>`;
+  const st=m.status||'sent';
+  if(st==='failed')return '<span class="st failed" title="Not sent yet — will retry">!</span>';
+  const label={sending:'Sending',sent:'Sent',delivered:'Delivered',read:'Read'}[st]||'Sent';
+  return `<span class="st ${st}" title="${label}"></span>`;
+}
+function fileHTML(m){
+  const name=esc(m.fileName||'file'), kb=m.fileSize?Math.max(1,Math.round(m.fileSize/1024))+' KB':'';
+  if(/^data:video\//.test(m.file||'')) return `<video src="${m.file}" controls preload="metadata"></video>`;
+  const ext=(m.fileName||'').split('.').pop().slice(0,4).toUpperCase()||'FILE';
+  return `<a class="file-card" href="${m.file||'#'}" download="${name}"><span class="fi">${esc(ext)}</span><span>${name}<small>${kb} · tap to download</small></span></a>`;
 }
 function renderMsgs(scroll){
   const box=$('msgs'); const ch=chat(curChat); const c=contact(curChat);
-  box.innerHTML = ch.msgs.length<=6 ? `<div class="enc-note">🔒 Messages are end-to-end encrypted and stored only on your phones. BharatApp Chat's server relays them, then deletes its copy.</div>` : '';
+  box.innerHTML = ch.msgs.length<=6 ? `<div class="enc-note">🔒 BharatApp Chat never saves your history.</div>` : '';
   let lastDay='';
   for(const m of ch.msgs){
     const day=fmtDay(m.ts);
     if(day!==lastDay){ lastDay=day; box.insertAdjacentHTML('beforeend',`<div class="daychip">${day}</div>`); }
     box.insertAdjacentHTML('beforeend',msgHTML(m,c));
   }
+  // live typing: their words as they type them
+  if(c&&c._draft) box.insertAdjacentHTML('beforeend',`<div class="brow theirs"><div class="bub draft-bub">${esc(c._draft)}<span class="dl">typing…</span></div></div>`);
   box.querySelectorAll('[data-mid]').forEach(el=>{
     el.addEventListener('click',()=>onBubbleTap(el.dataset.mid));
     let t; el.addEventListener('touchstart',()=>{t=setTimeout(()=>openMsgMenu(el.dataset.mid),480);},{passive:true});
@@ -585,11 +639,13 @@ function msgHTML(m,c){
   if(m.replyTo) inner+=`<div class="quote"><b>${m.replyTo.from==='me'?'You':esc(c.name)}</b>${esc(m.replyTo.text)}</div>`;
   if(m.kind==='img') inner+=`<img src="${m.img}" alt="photo">`;
   if(m.kind==='voice') inner+=voiceBubbleHTML(m);
+  if(m.kind==='file') inner+=fileHTML(m);
   if(m.text) inner+=esc(m.text);
   const burnCls=m.burn?' burnable':'';
   const burnBar=m.burn&&m.revealed?`<div class="burn-bar"><i style="animation:burnbar ${BURN_VIEW_S}s linear forwards"></i></div>`:'';
   const reacts=reactionChips(m);
-  return `<div class="brow ${side}"><div class="bub-wrap"><div class="bub${burnCls}" data-mid="${m.id}">${inner}${burnBar}<div class="meta">${m.expireAt?'⌛ ':''}${fmtTime(m.ts)} ${ticks(m)}</div></div>${reacts}</div></div>`;
+  const readCls=m.from==='me'&&m.status==='read'?' is-read':'';
+  return `<div class="brow ${side}"><div class="bub-wrap"><div class="bub${burnCls}${readCls}" data-mid="${m.id}">${inner}${burnBar}<div class="meta">${m.expireAt?'⌛ ':''}${fmtTime(m.ts)} ${ticks(m)}</div></div>${reacts}</div></div>`;
 }
 const BURN_VIEW_S=6;
 function onBubbleTap(mid){
@@ -610,6 +666,44 @@ function burnMsg(mid){
 
 /* ---------- sending ---------- */
 function toggleBurn(){ burnOn=!burnOn; setBurnUI(); }
+/* ---- composer extras: attach menu, emoji, documents and videos ---- */
+function toggleAttach(){ $('emoji-pop').classList.remove('on'); $('attach-pop').classList.toggle('on'); }
+const EMOJI='😀 😂 🤣 😊 😍 😘 😎 🤔 😅 😭 😡 🥳 🙏 👍 👎 👏 🙌 💪 ❤️ 💔 🔥 ✨ 🎉 💯 👀 🤝 🌸 ☕ 🍛 🎂 ✅ ❌'.split(' ');
+function toggleEmoji(){
+  const p=$('emoji-pop'); $('attach-pop').classList.remove('on');
+  if(!p.childElementCount) p.innerHTML=EMOJI.map(e=>`<button type="button" onclick="addEmoji('${e}')">${e}</button>`).join('');
+  p.classList.toggle('on');
+}
+function addEmoji(e){
+  const inp=$('msg-in'), at=inp.selectionStart??inp.value.length;
+  inp.value=inp.value.slice(0,at)+e+inp.value.slice(inp.selectionEnd??at);
+  inp.focus(); inp.selectionStart=inp.selectionEnd=at+e.length; inp.dispatchEvent(new Event('input'));
+}
+document.addEventListener('click',e=>{ if(!e.target.closest('#composer-main')){ $('attach-pop')?.classList.remove('on'); $('emoji-pop')?.classList.remove('on'); } });
+const FILE_MAX=5*1024*1024;
+function sendFile(input){
+  const f=input.files&&input.files[0]; input.value='';
+  if(!f)return;
+  if(f.size>FILE_MAX){ toast('Files up to 5 MB can be sent'); return; }
+  kConfirm({title:'Send this file?',message:f.name+' · '+Math.max(1,Math.round(f.size/1024))+' KB',okText:'Send',cancelText:'Cancel'}).then(ok=>{
+    if(!ok)return;
+    const rd=new FileReader();
+    rd.onload=()=>pushMine({kind:'file',file:rd.result,fileName:f.name,fileSize:f.size,text:''});
+    rd.readAsDataURL(f);
+  });
+}
+/* ---- typing: tell them I'm typing, and (live typing) what I'm writing ---- */
+let _typingAt=0,_draftT=null,_draftSent='';
+function liveTypingOn(){ return !(S&&S.set&&S.set.liveTyping===false); }
+function onComposeInput(){
+  const c=curChat&&contact(curChat); if(!c||!c.real||c.isGroup)return;
+  const v=$('msg-in').value;
+  if(v.trim()&&Date.now()-_typingAt>4000){ _typingAt=Date.now(); netSendLive(c,{kind:'typing'}); }
+  if(!liveTypingOn())return;
+  clearTimeout(_draftT);
+  _draftT=setTimeout(()=>{ if(v===_draftSent)return; _draftSent=v; netSendLive(c,{kind:'draft',text:v.slice(0,500)}); },350);
+}
+function stopDraft(c){ clearTimeout(_draftT); if(_draftSent){ _draftSent=''; netSendLive(c,{kind:'draft',text:''}); } }
 function setBurnUI(){ $('burn-toggle').classList.toggle('on',burnOn); $('burn-hint').classList.toggle('on',burnOn); }
 function clearReply(){ replyTo=null; $('reply-bar').classList.remove('on'); }
 function setReply(m,c){ replyTo={id:m.id,text:m.kind==='img'?'🖼 Photo':m.text,from:m.from};
@@ -636,21 +730,23 @@ function sendImage(input){
 }
 function pushMine(part){
   const ch=chat(curChat); const c=contact(curChat);
-  const m={id:uid(),from:'me',ts:now(),status:'sent',burn:burnOn,...part};
+  const m={id:uid(),from:'me',ts:now(),status:c.real&&!c.isGroup?'sending':'sent',burn:burnOn,...part};
   if(replyTo)m.replyTo=replyTo;
   if(ch.timer)m.expireAt=now()+ch.timer*1000;
   ch.msgs.push(m); clearReply(); burnOn=false; setBurnUI(); save(); renderMsgs(true);
   if(c.isGroup){
     netSendGroup(c,m).catch(()=>toast('Group message not sent — check internet'));
   } else if(c.real){
-    netSend(c,m).catch(e=>{
+    stopDraft(c);
+    netSend(c,m).then(()=>{ if(m.status==='sending'){ m.status='sent'; save(); if(curChat===c.id)renderMsgs(false); } }).catch(e=>{
+      m.status='failed'; save(); if(curChat===c.id)renderMsgs(false);
       if(e.message==='auth_required'||e.message==='auth_failed')
         toast('⚠️ This account is not activated on the server — go to Privacy → Log out, then sign up fresh');
       else if(e.message==='recipient_not_found')
         toast('That account no longer exists on the server');
       else if(e.message==='account_disabled')
         toast('⚠️ This account has been disabled by the administrator');
-      else toast('Not sent — check internet');
+      else toast('Not sent yet — it will send when you are back online');
     });
   }
   if(c.bot){
@@ -774,7 +870,8 @@ try{ history.pushState(null,''); }catch(e){}
   inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,110)+'px';
     const has=inp.value.trim().length>0;
     document.getElementById('send-btn').classList.toggle('hide',!has);
-    document.getElementById('mic-btn').classList.toggle('hide',has);});
+    document.getElementById('mic-btn').classList.toggle('hide',has);
+    onComposeInput();});
   inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}});
   if(S&&S.identities?.length){
     const d=S.data[S.active];for(const cid in d.chats){for(const m of d.chats[cid].msgs){if(m.expireAt)scheduleExpiry(m,cid);}}
