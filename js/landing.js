@@ -129,10 +129,11 @@ async function lgLogin(){
   try{
     // 1) rebuild the account key from the password and check it against the
     //    account's public key — before using up the code
-    let salt;
-    try{ salt=(await api('recover_salt',{username:u})).salt; }
+    let salt, keyUser=u;
+    try{ const rs=await api('recover_salt',{username:u}); salt=rs.salt; keyUser=rs.key_username||u; }
     catch(e){ lgMsg(e.message==='no_recovery'?'This account has no password, so it can only be opened on the phone it was made on':'Could not check the account'); return; }
-    const keys=await keyFromPassword(u,pass,salt);
+    // the key was made with the username the account had then
+    const keys=await keyFromPassword(keyUser,pass,salt);
     const {user}=await api('lookup',{handle:u});
     if(user.pubkey?.x!==keys.pub.x||user.pubkey?.y!==keys.pub.y){ lgMsg('Wrong password'); return; }
     // 2) the code logs this browser in as one more device

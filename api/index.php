@@ -113,8 +113,8 @@ function register(PDO $pdo, array $in): void {
     $kid = kalId();
     try {
       if ($verifier !== '') {
-        $st = $pdo->prepare('INSERT INTO k_users (kal_id, username, name, pubkey, token, email, verifier, salt, created_at, last_seen) VALUES (?,?,?,?,?,?,?,?,NOW(),NOW())');
-        $st->execute([$kid, $username, $name, json_encode($pubkey), $token, $email,
+        $st = $pdo->prepare('INSERT INTO k_users (kal_id, username, key_username, name, pubkey, token, email, verifier, salt, created_at, last_seen) VALUES (?,?,?,?,?,?,?,?,?,NOW(),NOW())');
+        $st->execute([$kid, $username, $username, $name, json_encode($pubkey), $token, $email,
                       password_hash($verifier, PASSWORD_DEFAULT), $salt]);
       } else {
         $st = $pdo->prepare('INSERT INTO k_users (kal_id, username, name, pubkey, token, email, created_at, last_seen) VALUES (?,?,?,?,?,?,NOW(),NOW())');
@@ -298,11 +298,13 @@ function recoverSalt(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
   if (!preg_match('/^[a-z0-9_]{3,20}$/', $u)) out(false, ['error' => 'bad_username']);
   try {
-    $st = $pdo->prepare('SELECT salt, verifier FROM k_users WHERE username = ?');
+    $st = $pdo->prepare('SELECT salt, verifier, key_username FROM k_users WHERE username = ?');
     $st->execute([$u]);
     $r = $st->fetch();
     if (!$r || empty($r['verifier'])) out(false, ['error' => 'no_recovery']);
-    out(true, ['salt' => (string)$r['salt']]);
+    // the key comes from the username it was created with, which may be an
+    // older @username — the app must derive it with that one
+    out(true, ['salt' => (string)$r['salt'], 'key_username' => (string)($r['key_username'] ?: $u)]);
   } catch (Throwable $e) {
     out(false, ['error' => 'no_recovery']);
   }
@@ -632,7 +634,8 @@ function changeUsername(PDO $pdo, array $in): void {
   $st->execute([$new, $me['kal_id']]); $ex = $st->fetch();
   if ($ex && strtotime($ex['last_seen']) > time() - 90*86400) out(false, ['error' => 'username_taken']);
   if ($ex) $pdo->prepare("UPDATE k_users SET username='' WHERE username=?")->execute([$new]);
-  $pdo->prepare('UPDATE k_users SET username = ?, username_changed_at = NOW() WHERE kal_id = ?')
+  // keep the username the account key was made with, for logging in later
+  $pdo->prepare('UPDATE k_users SET key_username = COALESCE(key_username, username), username = ?, username_changed_at = NOW() WHERE kal_id = ?')
       ->execute([$new, $me['kal_id']]);
   out(true, ['username' => $new]);
 }
@@ -1399,6 +1402,8 @@ function migrate(PDO $pdo): void {
   try { $pdo->exec("CREATE UNIQUE INDEX idx_username ON k_users (username)"); } catch (Throwable $e) {}
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN disabled TINYINT NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN email VARCHAR(254) NULL"); } catch (Throwable $e) {}
+  // the username the account key was derived from (it stays when the @username changes)
+  try { $pdo->exec("ALTER TABLE k_users ADD COLUMN key_username VARCHAR(20) NULL"); } catch (Throwable $e) {}
   try { $pdo->exec("CREATE INDEX idx_email ON k_users (email)"); } catch (Throwable $e) {}
   $pdo->exec("CREATE TABLE IF NOT EXISTS k_email_otp (
     email VARCHAR(254) PRIMARY KEY,
