@@ -215,3 +215,23 @@ function showApp(){
   // signed up from an invite link → offer to connect now
   if(window._pendingInvite&&me()?.token){ const u=window._pendingInvite; window._pendingInvite=null; setTimeout(()=>showInvite(u),400); }
 }
+
+/* ---- home page: demo phone slideshow (admin screenshots, else built-in screens) ---- */
+(function(){
+  const box=document.getElementById('lp-slides'); if(!box)return;
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let i=0;
+  function tick(){
+    const s=box.querySelectorAll('.lp-slide'); if(s.length<2)return;
+    s[i%s.length].classList.remove('on'); i++; s[i%s.length].classList.add('on');
+  }
+  if(!reduce) setInterval(tick,2000);
+  api('slides',{}).then(r=>{
+    const list=(r&&r.slides)||[]; if(!list.length)return;
+    box.innerHTML=list.map((u,k)=>'<div class="lp-slide'+(k?'':' on')+'"><img src="'+esc(u)+'" alt=""></div>').join('');
+    i=0;
+  }).catch(()=>{});
+  // the row of floating phones loops: repeat it once so the scroll is seamless
+  const t=document.querySelector('.lp-float-track');
+  if(t&&!reduce) t.innerHTML+=t.innerHTML;
+})();

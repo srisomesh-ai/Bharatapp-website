@@ -29,6 +29,8 @@ try {
     case 'login_otp_send':   loginOtpSend($pdo, $in); break;
     case 'login_otp_verify': loginOtpVerify($pdo, $in); break;
     case 'login_password': loginPassword($pdo, $in); break;
+    case 'contact':  contactForm($pdo, $in); break;
+    case 'slides':   listSlides(); break;
     case 'device_list':   deviceList($pdo, $in); break;
     case 'account_delete': accountDelete($pdo, $in); break;
     case 'device_remove': deviceRemove($pdo, $in); break;
@@ -664,6 +666,46 @@ function echoToMyDevices(PDO $pdo, array $me, string $peer, string $cid, string 
     if ($d === $me['dev']) continue;
     $ins->execute([$me['kal_id'], $d, $me['kal_id'], $peer, $cid, $iv, $blob]);
   }
+}
+
+/** Home page demo phone: the screenshots the admin uploaded, in name order. */
+function listSlides(): void {
+  $dir = __DIR__ . '/media/slides';
+  $files = is_dir($dir) ? glob($dir . '/*.{png,jpg,jpeg,webp}', GLOB_BRACE) : [];
+  sort($files);
+  out(true, ['slides' => array_map(fn($f) => '/api/media/slides/' . basename($f) . '?v=' . filemtime($f), $files ?: [])]);
+}
+
+/**
+ * Help page form: keep a copy and email it to the team. The sender's address
+ * goes in Reply-To, so answering the email replies to them directly.
+ */
+function contactForm(PDO $pdo, array $in): void {
+  $name = trim(mb_substr((string)($in['name'] ?? ''), 0, 60));
+  $contact = trim(mb_substr((string)($in['contact'] ?? ''), 0, 40));
+  $email = trim(mb_substr((string)($in['email'] ?? ''), 0, 120));
+  $msg = trim(mb_substr((string)($in['message'] ?? ''), 0, 3000));
+  if ($name === '' || $msg === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) out(false, ['error' => 'bad_input']);
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_contact (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(60) NOT NULL, contact VARCHAR(40) NOT NULL DEFAULT '',
+    email VARCHAR(120) NOT NULL, message TEXT NOT NULL, ip VARCHAR(45) NOT NULL, created_at DATETIME NOT NULL,
+    INDEX (ip, created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  $ip = clientIp();
+  $st = $pdo->prepare('SELECT COUNT(*) FROM k_contact WHERE ip = ? AND created_at > (NOW() - INTERVAL 1 HOUR)');
+  $st->execute([$ip]);
+  if ((int)$st->fetchColumn() >= 5) out(false, ['error' => 'too_many']);
+  $pdo->prepare('INSERT INTO k_contact (name, contact, email, message, ip, created_at) VALUES (?,?,?,?,?,NOW())')
+      ->execute([$name, $contact, $email, $msg, $ip]);
+
+  $to = defined('SUPPORT_TO') ? SUPPORT_TO : 'someswararao.pyle@gmail.com';
+  $from = 'support@bharatapp.chat';
+  $clean = fn($v) => str_replace(["\r", "\n"], ' ', $v);   // no header injection
+  $subject = 'BharatApp Chat help request from ' . $clean($name);
+  $body = "Name: $name\r\nContact: " . ($contact ?: '—') . "\r\nEmail: $email\r\n\r\n$msg\r\n";
+  $headers = "From: BharatApp Chat Support <$from>\r\nReply-To: " . $clean($email) . "\r\n"
+           . "Content-Type: text/plain; charset=utf-8\r\n";
+  try { @mail($to, $subject, $body, $headers, '-f' . $from); } catch (Throwable $e) {}
+  out(true, ['received' => true]);
 }
 
 function sendOtpMail(string $to, string $code): bool {

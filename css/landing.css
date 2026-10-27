@@ -10,14 +10,14 @@
 
 .lp-nav{display:flex;align-items:center;gap:28px;padding:calc(env(safe-area-inset-top) + 16px) 0 16px;border-bottom:1px solid var(--lp-rule)}
 .lp-brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:17px;text-decoration:none}
-.lp-brand img{height:36px;width:auto;display:block}
-@media (min-width:900px){.lp-brand img{height:42px}}
+.lp-brand img{height:46px;width:auto;display:block}
+@media (min-width:900px){.lp-brand img{height:58px}}
 .lp-links{display:none;gap:24px;margin-left:auto;font-size:14.5px;color:var(--lp-soft)}
 .lp-links a{text-decoration:none}
 .lp-links a:hover{color:var(--lp-ink)}
 .lp-login{margin-left:auto;font:600 14.5px Inter,sans-serif;color:var(--lp-ink);border-bottom:1.5px solid var(--lp-ink);padding:2px 0}
 
-.lp-hero{display:grid;grid-template-columns:minmax(0,1fr);gap:44px;padding:44px 0 56px}
+.lp-hero{display:grid;grid-template-columns:minmax(0,1fr);gap:40px;padding:18px 0 56px}
 .lp-hero>*,.lp-two>*{min-width:0}
 .lp-kicker{font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--lp-green);font-weight:600}
 .lp-h1{font-family:Newsreader,Georgia,serif;font-weight:500;font-size:40px;line-height:1.08;letter-spacing:-.01em;margin:12px 0 16px;color:var(--lp-ink)}
@@ -89,7 +89,7 @@
   .lp-login{margin-left:8px}
 }
 @media (min-width:900px){
-  .lp-hero{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);align-items:center;padding:80px 0}
+  .lp-hero{grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);align-items:center;padding:34px 0 80px}
   .lp-h1{font-size:clamp(44px,3.9vw,54px)}
   .lp-lead{font-size:18px}
   .lp-alt{flex-direction:row;align-items:center;gap:26px}
@@ -111,3 +111,63 @@
 .lp-bharat-card span{display:block;font:italic 16px Newsreader,Georgia,serif;color:var(--lp-ink);margin-top:2px}
 .lp-bharat-card small{display:block;font:13.5px/1.5 Inter,sans-serif;color:var(--lp-soft);margin-top:6px}
 .lp-sugg{border:1px solid #CFE9DB;background:#EFFAF3;color:#0A7D4F;border-radius:999px;padding:3px 10px;font:600 13px Inter,sans-serif;margin:4px 6px 0 0}
+.lp-foot{display:block}
+.lp-foot-cols{display:grid;gap:22px}
+@media (min-width:760px){.lp-foot-cols{grid-template-columns:1.4fr 1fr 1fr 1fr}}
+.lp-foot h4{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--lp-ink)}
+.lp-foot a{display:block;color:var(--lp-soft);text-decoration:none;padding:3px 0}
+.lp-foot a:hover{color:var(--lp-ink)}
+.lp-foot p{margin:10px 0 0;max-width:22em}
+.lp-love{margin-top:24px;padding-top:16px;border-top:1px solid var(--lp-rule);display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}
+.lp-love b{color:#C2412D}
+/* ---- demo phone slideshow (2 s per screen) ---- */
+#scr-landing .lp-slides{position:relative}
+#scr-landing .lp-slide{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0;transition:opacity .5s ease}
+#scr-landing .lp-slide.on{opacity:1}
+#scr-landing .lp-slide img{width:100%;height:100%;object-fit:cover;display:block}
+#scr-landing .pb u{display:block;text-decoration:none;font-size:11.5px;font-weight:700;color:#0E6B47}
+#scr-landing .ph-av.big{width:76px;height:76px;font-size:24px}
+#scr-landing .ph-av.grp{background:#BFE3CE;color:#0E6B47}
+#scr-landing .lp-call{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  background:linear-gradient(170deg,#0E6B47,#0A4A33);color:#fff;text-align:center}
+#scr-landing .lp-call small{opacity:.8}
+#scr-landing .lp-call-btns{display:flex;gap:18px;margin-top:auto;margin-bottom:28px}
+#scr-landing .lp-call-btns i{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.18)}
+#scr-landing .lp-call-btns i.end{background:#E0483A}
+#scr-landing .lp-call .ph-av.big{margin-top:auto}
+#scr-landing .lp-video{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;background:#1E2723;color:#fff}
+#scr-landing .lp-vid-main{flex:1;display:grid;place-items:center;width:100%;background:radial-gradient(circle at 50% 40%,#3B5A4B,#1E2723)}
+#scr-landing .lp-vid-pip{position:absolute;right:10px;top:34px;width:64px;height:88px;border-radius:12px;background:#4E6B5C;display:grid;place-items:center;border:2px solid rgba(255,255,255,.4)}
+#scr-landing .lp-vid-tag{position:absolute;top:40%;margin-top:60px;font-size:12px;background:rgba(0,0,0,.35);padding:4px 10px;border-radius:999px}
+#scr-landing .lp-video .lp-call-btns{position:absolute;bottom:0}
+
+/* ---- row of floating phones: chat, voice, video, group ---- */
+.lp-float{overflow:hidden;padding:20px 0 40px;margin:0 -20px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.lp-float-track{display:flex;gap:34px;width:max-content;animation:lpMarquee 36s linear infinite;padding:0 20px}
+.lp-float:hover .lp-float-track{animation-play-state:paused}
+.lp-float figure{margin:0;display:grid;justify-items:center;gap:12px;animation:lpBob 5s ease-in-out infinite}
+.lp-float figure:nth-child(even){animation-delay:-2.5s}
+.lp-float figcaption{font:600 14.5px Inter,sans-serif;color:var(--lp-ink);display:flex;align-items:center;gap:6px}
+#scr-landing .ph.sm{width:190px;border-radius:30px;padding:8px}
+#scr-landing .ph.sm .ph-scr{border-radius:23px;font-size:12px}
+#scr-landing .ph.sm .pb{font-size:12px}
+#scr-landing .ph.sm .ph-top{padding:22px 10px 9px}
+#scr-landing .ph.sm .ph-av.big{width:56px;height:56px;font-size:18px}
+@keyframes lpMarquee{to{transform:translateX(-50%)}}
+@keyframes lpBob{50%{transform:translateY(-10px)}}
+@media (prefers-reduced-motion:reduce){.lp-float-track,.lp-float figure{animation:none}}
+
+/* ---- Android "coming soon" next to the web button ---- */
+.lp-get{display:inline-flex;align-items:center;gap:14px;flex-wrap:wrap}
+.lp-web{background:#fff;border:1px solid var(--lp-rule);border-radius:8px;padding:9px 16px;font:600 14.5px Inter,sans-serif;color:var(--lp-ink);cursor:pointer}
+.lp-web:hover{border-color:#B9C7BF}
+.lp-android{font:600 14.5px Inter,sans-serif;color:var(--lp-ink)}
+.lp-soon{display:inline-block;background:#FFF4E5;color:#9A5A12;border:1px solid #F5D7A8;border-radius:999px;padding:2px 9px;font:700 11.5px Inter,sans-serif;margin-left:4px;vertical-align:middle}
+/* the slideshow screen fills the phone frame (its slides are stacked on top of each other) */
+#scr-landing .lp-vis .ph{position:relative}
+#scr-landing .ph-scr.lp-slides{position:absolute;inset:10px;height:auto}
+#scr-landing .lp-call,#scr-landing .lp-video{width:100%;align-self:stretch}
+#scr-landing .ph.sm .ph-scr{height:100%}
+#scr-landing .ph.sm{display:flex}
+#scr-landing .ph.sm .ph-scr{flex:1}
+.lp-alt{flex-direction:column!important;align-items:flex-start!important;gap:12px!important}

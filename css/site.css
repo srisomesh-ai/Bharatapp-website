@@ -1,0 +1,73 @@
+/* ============ Pages outside the app (Features, Help, Privacy, …) ============
+   Same look as the home page: paper background, serif headings, thin rules. */
+:root{--paper:#FBFAF6;--ink:#16181D;--soft:#5D6169;--rule:#E4E1D8;--green:#0E6B47;--card:#fff}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font:16px/1.65 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+a{color:var(--green)}
+.sw{max-width:1120px;margin:0 auto;padding:0 20px}
+
+/* header */
+.s-nav{display:flex;align-items:center;gap:18px;padding:14px 0;border-bottom:1px solid var(--rule)}
+.s-brand img{height:48px;width:auto;display:block}
+.s-links{display:none;gap:22px;margin-left:auto;font-size:14.5px}
+.s-links a{color:var(--soft);text-decoration:none}
+.s-links a:hover,.s-links a.on{color:var(--ink)}
+.s-home{margin-left:auto;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:#fff;border-radius:999px;
+  padding:8px 14px;font:600 14px Inter,sans-serif;color:var(--ink);text-decoration:none}
+.s-home:hover{border-color:#B9C7BF}
+@media (min-width:860px){.s-links{display:flex}.s-home{margin-left:12px}.s-brand img{height:56px}}
+
+/* content */
+.s-main{padding:36px 20px 56px}
+.s-kicker{font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--green);font-weight:600}
+.s-main h1{font-family:Newsreader,Georgia,serif;font-weight:500;font-size:40px;line-height:1.1;margin:10px 0 14px}
+.s-main h2{font-family:Newsreader,Georgia,serif;font-weight:500;font-size:28px;line-height:1.2;margin:40px 0 10px}
+.s-main h3{font-size:17px;margin:0 0 4px}
+.s-lead{font-size:18px;color:var(--soft);max-width:40em}
+.s-main p,.s-main li{color:var(--soft)}
+.s-main b,.s-main strong{color:var(--ink)}
+.s-grid{display:grid;gap:14px;margin-top:22px}
+@media (min-width:760px){.s-grid{grid-template-columns:repeat(2,1fr)}.s-main h1{font-size:52px}}
+@media (min-width:1000px){.s-grid.three{grid-template-columns:repeat(3,1fr)}}
+.s-card{background:var(--card);border:1px solid var(--rule);border-radius:16px;padding:20px}
+.s-card p{margin:4px 0 0;font-size:15px}
+.s-ic{width:42px;height:42px;border-radius:12px;background:#EAF6EF;color:var(--green);display:grid;place-items:center;margin-bottom:12px}
+.s-ic svg{width:22px;height:22px}
+.s-steps{list-style:none;padding:0;margin:20px 0 0;counter-reset:s}
+.s-steps li{counter-increment:s;display:grid;grid-template-columns:52px 1fr;padding:18px 0;border-bottom:1px solid var(--rule)}
+.s-steps li:before{content:counter(s,decimal-leading-zero);font-family:Newsreader,Georgia,serif;font-size:24px;color:var(--green)}
+.s-steps b{display:block;font-size:17px;color:var(--ink)}
+.s-cta{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:#fff;text-decoration:none;border-radius:8px;padding:12px 20px;font-weight:600}
+.s-badge{display:inline-block;background:#FFF4E5;color:#9A5A12;border:1px solid #F5D7A8;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:700;margin-left:8px;vertical-align:middle}
+details.s-faq{border-bottom:1px solid var(--rule);padding:14px 0}
+details.s-faq summary{cursor:pointer;font-weight:600;color:var(--ink);list-style:none;display:flex;justify-content:space-between;gap:12px}
+details.s-faq summary:after{content:"+";color:var(--green);font-size:20px;line-height:1}
+details.s-faq[open] summary:after{content:"–"}
+details.s-faq p{margin:8px 0 0}
+
+/* legal pages keep their own simple tables and cards */
+.s-main table{width:100%;border-collapse:collapse;font-size:14.5px}
+.s-main th,.s-main td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+.s-main .card{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:16px 18px;margin:14px 0}
+.table-scroll{overflow-x:auto}
+
+/* forms (Help) */
+.s-form{display:grid;gap:12px;max-width:560px;margin-top:18px}
+.s-form label{font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--soft)}
+.s-form input,.s-form textarea{width:100%;border:1px solid var(--rule);background:#fff;border-radius:10px;padding:12px 14px;font:16px Inter,sans-serif;color:var(--ink)}
+.s-form textarea{min-height:130px;resize:vertical}
+.s-form input:focus,.s-form textarea:focus{outline:none;border-color:#9CC8B1;box-shadow:0 0 0 3px rgba(14,107,71,.1)}
+.s-form button{justify-self:start;border:0;cursor:pointer}
+.s-ok{background:#EAF6EF;border:1px solid #CFE9DB;color:#0A5D3C;border-radius:12px;padding:16px 18px;max-width:560px}
+.s-err{color:#B4402F;font-size:14px}
+
+/* footer */
+.s-foot{border-top:1px solid var(--rule);padding:30px 0 40px;font-size:14px;color:var(--soft)}
+.s-foot .cols{display:grid;gap:22px}
+@media (min-width:760px){.s-foot .cols{grid-template-columns:1.4fr 1fr 1fr 1fr}}
+.s-foot h4{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink)}
+.s-foot a{display:block;color:var(--soft);text-decoration:none;padding:3px 0}
+.s-foot a:hover{color:var(--ink)}
+.s-foot .love{margin-top:24px;padding-top:16px;border-top:1px solid var(--rule);display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}
+.s-foot .love b{color:#C2412D}

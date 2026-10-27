@@ -42,6 +42,9 @@ input:focus{outline:none;border-color:var(--gold)}
 .newuser summary{cursor:pointer;font-weight:700}
 .nu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:10px 0}
 #nu-out{margin-top:8px}
+.slides{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}
+.slides figure{margin:0;display:grid;gap:6px;justify-items:center}
+.slides img{width:140px;border-radius:14px;border:1px solid rgba(128,128,128,.3)}
 .toolbar input{flex:1;min-width:200px}
 .tabs{display:flex;gap:8px;margin-bottom:16px}
 .tabb{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 15px;color:var(--muted);font-weight:600;font-size:14px}
@@ -98,6 +101,7 @@ tr:last-child td{border-bottom:none}
       <button class="tabb on" id="tab-users" onclick="showTab('users')">Users</button>
       <button class="tabb" id="tab-groups" onclick="showTab('groups')">Groups</button>
       <button class="tabb" id="tab-trace" onclick="showTab('trace')">Trace forward</button>
+      <button class="tabb" id="tab-slides" onclick="showTab('slides')">Screenshots</button>
     </div>
 
     <div id="view-users">
@@ -129,6 +133,11 @@ tr:last-child td{border-bottom:none}
       </table>
     </div>
 
+    <div id="view-slides" style="display:none">
+      <p class="muted" style="margin:4px 0 10px">Screenshots shown on the home page phone, changing every 2 seconds, in upload order. Use phone screenshots (portrait, PNG/JPG, up to 2 MB). With none uploaded, the home page shows its built-in example screens.</p>
+      <label class="btn" style="cursor:pointer">Upload screenshot<input type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onchange="uploadSlides(this)"></label>
+      <div id="slides-list" class="slides"></div>
+    </div>
     <div id="view-trace" style="display:none">
       <p class="muted" style="margin:4px 0 10px">Use only on a lawful order. Paste the exact forwarded text, or its 64-character fingerprint. BharatApp Chat never sees message content — only fingerprints of forwarded messages are kept.</p>
       <textarea id="trace-in" rows="4" style="width:100%;box-sizing:border-box;border-radius:11px;padding:10px;font:inherit" placeholder="Forwarded message text or fingerprint"></textarea>
@@ -247,11 +256,29 @@ async function createUser(){
       bad_email:'Use a Gmail address (or leave it empty)',bad_username:'Username: 3–30 letters, numbers or _'}[e.message]||('Failed: '+e.message);
   }finally{ b.disabled=false; }
 }
+async function loadSlides(){
+  try{ const r=await call('slides',{});
+    $('slides-list').innerHTML=r.slides.length?r.slides.map(x=>`<figure><img src="${esc(x.url)}" alt=""><button class="btn sm red" onclick="delSlide('${esc(x.name)}')">Remove</button></figure>`).join(''):'<p class="muted">No screenshots yet.</p>';
+  }catch(e){ toast(e.message); }
+}
+async function uploadSlides(inp){
+  for(const f of inp.files){
+    if(f.size>2*1024*1024){ toast(f.name+' is over 2 MB'); continue; }
+    const data=await new Promise(res=>{const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f);});
+    try{ await call('slide_add',{data}); }catch(e){ toast('Could not upload '+f.name); }
+  }
+  inp.value=''; loadSlides(); toast('Uploaded');
+}
+async function delSlide(name){
+  if(!confirm('Remove this screenshot?'))return;
+  try{ await call('slide_del',{name}); loadSlides(); }catch(e){ toast(e.message); }
+}
 async function loadStatsOnly(){ try{ const s=await call('stats',{}); const st=s.stats;
   $('stats').innerHTML=[['Total users',st.users],['Active (7d)',st.active7d],['Disabled',st.disabled],['Queued msgs',st.queued],['Groups',st.groups]]
     .map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join(''); }catch(e){} }
 function showTab(t){
-  for(const k of ['users','groups','trace']){
+  if(t==='slides')loadSlides();
+  for(const k of ['users','groups','trace','slides']){
     $('tab-'+k).classList.toggle('on',t===k); $('view-'+k).style.display=t===k?'block':'none';
   }
 }

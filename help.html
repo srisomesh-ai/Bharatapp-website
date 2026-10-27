@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Help & contact — BharatApp Chat</title>
+<meta name="description" content="Answers to common questions, and a form to contact the BharatApp Chat team.">
+<link rel="icon" href="/icons/bharatapp.ico?v=2" sizes="48x48">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/site.css?v=2">
+</head>
+<body>
+<div id="site-header"></div>
+<main class="sw s-main">
+<div class="s-kicker">Help</div>
+<h1>How can we help?</h1>
+<p class="s-lead">Find a quick answer below, or send us a message and we will get back to you.</p>
+<h2>Common questions</h2>
+<details class="s-faq"><summary>Do I need a phone number?</summary><p>No. You sign up with a @username and verify a Gmail address once. Nobody you chat with sees your Gmail.</p></details>
+<details class="s-faq"><summary>What can my username be?</summary><p>Free usernames need 4 or more letters and at least one number, for example @lakshmi7. You can use letters, numbers and _ (underscore).</p></details>
+<details class="s-faq"><summary>I forgot my password. Can you reset it?</summary><p>No — your password creates the key that unlocks your chats, and we never see it. Keep it somewhere safe. If you still have your phone signed in, your chats stay there.</p></details>
+<details class="s-faq"><summary>Why am I asked for a code when I log in?</summary><p>The first time you sign in on a new phone or browser, we email a code to your Gmail to make sure it is really you. After that, your username and password are enough on that device.</p></details>
+<details class="s-faq"><summary>Can BharatApp Chat read my messages?</summary><p>No. Messages are encrypted on your device and deleted from our server once delivered. BharatApp Chat never saves your history.</p></details>
+<details class="s-faq"><summary>How do I move to a new phone?</summary><p>Turn on Google Drive backup in Settings → Backup. On the new phone, sign in with your username and password and your chats come back from your Drive.</p></details>
+<details class="s-faq"><summary>How do I delete my account?</summary><p>See <a href="/delete-account.html">Delete your account</a>.</p></details>
+<h2>Contact us</h2>
+<div id="help-done" class="s-ok" hidden><b>Request submitted.</b> Thank you — our team will reply to your email soon.</div>
+<form class="s-form" id="help-form" onsubmit="sendHelp(event)">
+<div><label for="h-name">Name</label><input id="h-name" maxlength="60" required autocomplete="name"></div>
+<div><label for="h-contact">Contact number or @username</label><input id="h-contact" maxlength="40" autocomplete="tel"></div>
+<div><label for="h-email">Email</label><input id="h-email" type="email" maxlength="120" required autocomplete="email"></div>
+<div><label for="h-msg">Message</label><textarea id="h-msg" maxlength="3000" required></textarea></div>
+<div class="s-err" id="h-err"></div>
+<button class="s-cta" id="h-go" type="submit">Send request</button>
+</form>
+</main>
+<div id="site-footer"></div>
+<script src="/js/site.js?v=1"></script>
+<script>
+async function sendHelp(e){
+  e.preventDefault();
+  const v=id=>document.getElementById(id).value.trim();
+  const b=document.getElementById('h-go'), err=document.getElementById('h-err');
+  err.textContent=''; b.disabled=true;
+  try{
+    const r=await fetch('/api/index.php',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'contact',name:v('h-name'),contact:v('h-contact'),email:v('h-email'),message:v('h-msg')})});
+    const j=await r.json();
+    if(!j.ok){ err.textContent={too_many:'Too many requests — please try again later',bad_input:'Please fill in your name, email and message'}[j.error]||'Could not send — please try again'; return; }
+    document.getElementById('help-form').hidden=true; document.getElementById('help-done').hidden=false;
+  }catch(x){ err.textContent='Could not send — check your internet'; }
+  finally{ b.disabled=false; }
+}
+</script>
+</body></html>
