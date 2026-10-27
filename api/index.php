@@ -56,6 +56,8 @@ try {
     case 'presence':      presence($pdo, $in); break;
     case 'fcm_register':  fcmRegister($pdo, $in); break;
     case 'notify_devices': notifyDevices($pdo, $in); break;
+    case 'privacy_get':   privacyGet($pdo, $in); break;
+    case 'privacy_set':   privacySet($pdo, $in); break;
     case 'status_view':   statusView($pdo, $in); break;
     case 'status_viewers': statusViewers($pdo, $in); break;
     case 'status_delete':  statusDelete($pdo, $in); break;
@@ -148,6 +150,7 @@ function lookup(PDO $pdo, array $in): void {
     $val = $av->fetchColumn();
     if ($val) $avatar = $val;
   } catch (Throwable $e) { /* column not created yet — ignore */ }
+  if ((privacyOf($pdo, $u['kal_id'])['photo'] ?? 'everyone') !== 'everyone') $avatar = null;
   out(true, ['user' => ['kal_id' => $u['kal_id'], 'username' => $u['username'], 'name' => $u['name'], 'pubkey' => json_decode($u['pubkey'], true), 'avatar' => $avatar]]);
 }
 
@@ -178,7 +181,8 @@ function send(PDO $pdo, array $in): void {
   $hint = (string)($in['push'] ?? 'message');   // app says what this is
   if (str_starts_with($hint, 'call')) {
     if ($hint === 'call-offer') {
-      sendPush($pdo, $to, $sname, 'Incoming voice call', $me['kal_id'], 'call');
+      if (allowedBy($pdo, $to, 'calls', $me['kal_id']))
+        sendPush($pdo, $to, $sname, 'Incoming voice call', $me['kal_id'], 'call');
     } elseif ($hint === 'call-end') {
       // stop the ringing on a closed phone (and show "missed call")
       sendPush($pdo, $to, $sname, 'Missed voice call', $me['kal_id'], 'call_end');
@@ -255,6 +259,10 @@ function contactsProfiles(PDO $pdo, array $in): void {
     $st->execute($ids);
     $rows = $st->fetchAll();
   }
+  foreach ($rows as &$r) {
+    if (isset($r['avatar']) && !allowedBy($pdo, $r['kal_id'], 'photo', $me['kal_id'])) $r['avatar'] = null;
+  }
+  unset($r);
   out(true, ['users' => $rows]);
 }
 
@@ -898,14 +906,75 @@ function fcmAccessToken(): ?string {
   return $j['access_token'] ?? null;
 }
 
+/* Last seen of `target`. (It used to read the target from kal_id, the same
+   field auth() uses for the caller — so it never authenticated.) Honours the
+   target's "last seen" privacy. */
 function presence(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
-  $kid = strtoupper(trim((string)($in['kal_id'] ?? '')));
+  $kid = strtoupper(trim((string)($in['target'] ?? '')));
   if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $kid)) out(false, ['error'=>'bad_id']);
   $st = $pdo->prepare('SELECT last_seen FROM k_users WHERE kal_id = ?'); $st->execute([$kid]);
   $u = $st->fetch();
   if (!$u) out(false, ['error'=>'not_found']);
+  if (!allowedBy($pdo, $kid, 'last_seen', $me['kal_id'])) out(true, ['hidden' => true]);
   out(true, ['last_seen' => strtotime($u['last_seen'])*1000]);
+}
+
+/* ---------------- privacy ----------------
+   last_seen: contacts | nobody      photo: everyone | contacts | nobody
+   calls:     contacts | nobody      status: contacts | except | only
+   status_list: KAL-IDs for except/only */
+function privacyDefaults(): array {
+  return ['last_seen'=>'contacts','photo'=>'everyone','calls'=>'contacts',
+          'status'=>'contacts','status_list'=>[]];
+}
+function privacyOf(PDO $pdo, string $kid): array {
+  static $cache = [];
+  if (isset($cache[$kid])) return $cache[$kid];
+  $p = privacyDefaults();
+  try {
+    $st = $pdo->prepare('SELECT privacy FROM k_users WHERE kal_id = ?'); $st->execute([$kid]);
+    $j = json_decode((string)$st->fetchColumn(), true);
+    if (is_array($j)) $p = array_merge($p, $j);
+  } catch (Throwable $e) {}
+  return $cache[$kid] = $p;
+}
+function areContacts(PDO $pdo, string $a, string $b): bool {
+  if ($a === $b) return true;
+  $st = $pdo->prepare("SELECT 1 FROM k_contacts WHERE ((a=? AND b=?) OR (a=? AND b=?)) AND status='accepted' LIMIT 1");
+  $st->execute([$a,$b,$b,$a]);
+  return (bool)$st->fetch();
+}
+/* May $viewer see $owner's $what? $viewer '' = not logged in. */
+function allowedBy(PDO $pdo, string $owner, string $what, string $viewer): bool {
+  if ($viewer === $owner) return true;
+  $v = privacyOf($pdo, $owner)[$what] ?? 'contacts';
+  if ($v === 'everyone') return true;
+  if ($v === 'nobody') return false;
+  return $viewer !== '' && areContacts($pdo, $owner, $viewer);
+}
+function privacyGet(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  out(true, ['privacy' => privacyOf($pdo, $me['kal_id'])]);
+}
+function privacySet(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  try { $pdo->exec("ALTER TABLE k_users ADD COLUMN privacy TEXT NULL"); } catch (Throwable $e) {}
+  $p = privacyOf($pdo, $me['kal_id']);
+  $allowed = ['last_seen'=>['contacts','nobody'], 'photo'=>['everyone','contacts','nobody'],
+              'calls'=>['contacts','nobody'], 'status'=>['contacts','except','only']];
+  foreach ($allowed as $k => $vals) {
+    if (isset($in[$k])) {
+      if (!in_array($in[$k], $vals, true)) out(false, ['error' => 'bad_'.$k]);
+      $p[$k] = $in[$k];
+    }
+  }
+  if (isset($in['status_list']) && is_array($in['status_list'])) {
+    $p['status_list'] = array_values(array_slice(array_filter($in['status_list'],
+        fn($x) => preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', (string)$x)), 0, 500));
+  }
+  $pdo->prepare('UPDATE k_users SET privacy = ? WHERE kal_id = ?')->execute([json_encode($p), $me['kal_id']]);
+  out(true, ['privacy' => $p]);
 }
 
 function statusView(PDO $pdo, array $in): void {
@@ -1071,11 +1140,26 @@ function statusFeed(PDO $pdo, array $in): void {
                        WHERE s.kal_id IN ($ph) AND s.created_at > (NOW() - INTERVAL 24 HOUR)
                        ORDER BY s.created_at DESC LIMIT 200");
   $st->execute($ids);
+  // Only people who are actually connected, and whose status privacy lets
+  // me see it (the list comes from the app, so it isn't trusted).
+  $ok = [];
+  foreach ($ids as $owner) {
+    if ($owner === $me['kal_id']) { $ok[$owner] = true; continue; }
+    if (!areContacts($pdo, $owner, $me['kal_id'])) { $ok[$owner] = false; continue; }
+    $p = privacyOf($pdo, $owner);
+    $list = $p['status_list'] ?? [];
+    $ok[$owner] = match ($p['status'] ?? 'contacts') {
+      'except' => !in_array($me['kal_id'], $list, true),
+      'only'   => in_array($me['kal_id'], $list, true),
+      default  => true,
+    };
+  }
+  $all = array_values(array_filter($st->fetchAll(), fn($r) => $ok[$r['kal_id']] ?? false));
   $rows = array_map(fn($r)=>[
     'id'=>(int)$r['id'],'kal_id'=>$r['kal_id'],'username'=>$r['username'],'name'=>$r['name'],
     'type'=>$r['type'],'payload'=>$r['payload'],'ts'=>strtotime($r['created_at'])*1000,
     'views'=>(int)$r['views'],'allow_share'=>(int)($r['allow_share']??0)
-  ], $st->fetchAll());
+  ], $all);
   out(true, ['status' => $rows]);
 }
 
@@ -1093,8 +1177,28 @@ function groupCreate(PDO $pdo, array $in): void {
 }
 /* Add/remove members, rename, or leave a group.
    Only the owner may add, remove or rename; anyone may leave. */
+/* Group extras live in k_groups: photo, description, admins (JSON list) and
+   settings (JSON): send = all|admins (who may message), edit = all|admins
+   (who may change name, photo, description). The owner is always an admin. */
+function groupMigrate(PDO $pdo): void {
+  foreach (["photo MEDIUMTEXT NULL", "description TEXT NULL", "admins TEXT NULL", "settings TEXT NULL"] as $col) {
+    try { $pdo->exec("ALTER TABLE k_groups ADD COLUMN $col"); } catch (Throwable $e) {}
+  }
+}
+function groupView(array $g): array {
+  $admins = json_decode((string)($g['admins'] ?? ''), true) ?: [];
+  if (!in_array($g['owner'], $admins, true)) array_unshift($admins, $g['owner']);
+  $settings = array_merge(['send'=>'all','edit'=>'all'],
+                          json_decode((string)($g['settings'] ?? ''), true) ?: []);
+  return ['gid'=>$g['gid'],'name'=>$g['name'],'owner'=>$g['owner'],
+          'members'=>json_decode($g['members'],true) ?: [],
+          'admins'=>array_values($admins),'settings'=>$settings,
+          'description'=>(string)($g['description'] ?? ''),'photo'=>$g['photo'] ?? null];
+}
+
 function groupUpdate(PDO $pdo, array $in): void {
   $me  = auth($pdo, $in);
+  groupMigrate($pdo);
   $gid = (string)($in['gid'] ?? '');
   $act = (string)($in['act'] ?? '');
 
@@ -1102,12 +1206,19 @@ function groupUpdate(PDO $pdo, array $in): void {
   $st->execute([$gid]);
   $g = $st->fetch();
   if (!$g) out(false, ['error' => 'group_not_found']);
-
-  $members = json_decode($g['members'], true);
-  if (!is_array($members)) $members = [];
+  $v = groupView($g);
+  $members = $v['members'];
+  $admins = $v['admins'];
   if (!in_array($me['kal_id'], $members, true)) out(false, ['error' => 'not_a_member']);
-
-  $isOwner = ($g['owner'] === $me['kal_id']);
+  $isAdmin = in_array($me['kal_id'], $admins, true);
+  $save = function (array $fields) use ($pdo, $gid) {
+    $sets = implode(', ', array_map(fn($k) => "$k = ?", array_keys($fields)));
+    $pdo->prepare("UPDATE k_groups SET $sets WHERE gid = ?")->execute([...array_values($fields), $gid]);
+  };
+  $reply = function () use ($pdo, $gid) {
+    $st = $pdo->prepare('SELECT * FROM k_groups WHERE gid = ?'); $st->execute([$gid]);
+    out(true, ['group' => groupView($st->fetch())]);
+  };
 
   if ($act === 'leave') {
     $members = array_values(array_filter($members, fn($m) => $m !== $me['kal_id']));
@@ -1115,20 +1226,62 @@ function groupUpdate(PDO $pdo, array $in): void {
       $pdo->prepare('DELETE FROM k_groups WHERE gid = ?')->execute([$gid]);
       out(true, ['left' => true, 'deleted' => true]);
     }
-    // hand ownership on if the owner leaves
-    $owner = $isOwner ? $members[0] : $g['owner'];
-    $pdo->prepare('UPDATE k_groups SET members = ?, owner = ? WHERE gid = ?')
-        ->execute([json_encode($members), $owner, $gid]);
+    $admins = array_values(array_filter($admins, fn($m) => $m !== $me['kal_id']));
+    if (!$admins) $admins = [$members[0]];              // never leave it without an admin
+    $owner = $g['owner'] === $me['kal_id'] ? $admins[0] : $g['owner'];
+    $save(['members' => json_encode($members), 'owner' => $owner, 'admins' => json_encode($admins)]);
     out(true, ['left' => true, 'members' => $members]);
   }
 
-  if (!$isOwner) out(false, ['error' => 'owner_only']);
+  // name / photo / description: anyone, unless only admins may edit
+  if ($act === 'rename' || $act === 'set_info') {
+    if ($v['settings']['edit'] === 'admins' && !$isAdmin) out(false, ['error' => 'admins_only']);
+    $f = [];
+    if (isset($in['name'])) {
+      $name = trim((string)$in['name']);
+      if ($name === '' || mb_strlen($name) > 60) out(false, ['error' => 'bad_name']);
+      $f['name'] = $name;
+    }
+    if (isset($in['description'])) {
+      $d = trim((string)$in['description']);
+      if (mb_strlen($d) > 1000) out(false, ['error' => 'description_too_long']);
+      $f['description'] = $d;
+    }
+    if (isset($in['photo'])) {
+      $ph = (string)$in['photo'];
+      if ($ph !== '' && strlen($ph) > 250000) out(false, ['error' => 'photo_too_big']);
+      $f['photo'] = $ph === '' ? null : $ph;
+    }
+    if (!$f) out(false, ['error' => 'nothing_to_update']);
+    $save($f);
+    $reply();
+  }
 
-  if ($act === 'rename') {
-    $name = trim((string)($in['name'] ?? ''));
-    if ($name === '' || mb_strlen($name) > 60) out(false, ['error' => 'bad_name']);
-    $pdo->prepare('UPDATE k_groups SET name = ? WHERE gid = ?')->execute([$name, $gid]);
-    out(true, ['renamed' => true, 'name' => $name]);
+  if (!$isAdmin) out(false, ['error' => 'admins_only']);
+
+  if ($act === 'set_settings') {
+    $set = $v['settings'];
+    foreach (['send', 'edit'] as $k) {
+      if (isset($in[$k])) {
+        if (!in_array($in[$k], ['all', 'admins'], true)) out(false, ['error' => 'bad_'.$k]);
+        $set[$k] = $in[$k];
+      }
+    }
+    $save(['settings' => json_encode($set)]);
+    $reply();
+  }
+
+  if ($act === 'make_admin' || $act === 'remove_admin') {
+    $who = (string)($in['member'] ?? '');
+    if (!in_array($who, $members, true)) out(false, ['error' => 'not_a_member']);
+    if ($act === 'make_admin') {
+      if (!in_array($who, $admins, true)) $admins[] = $who;
+    } else {
+      if ($who === $g['owner']) out(false, ['error' => 'cannot_remove_owner']);
+      $admins = array_values(array_filter($admins, fn($m) => $m !== $who));
+    }
+    $save(['admins' => json_encode($admins)]);
+    $reply();
   }
 
   if ($act === 'add') {
@@ -1142,8 +1295,7 @@ function groupUpdate(PDO $pdo, array $in): void {
       }
     }
     if (count($members) > 256) out(false, ['error' => 'group_full']);
-    $pdo->prepare('UPDATE k_groups SET members = ? WHERE gid = ?')
-        ->execute([json_encode($members), $gid]);
+    $save(['members' => json_encode($members)]);
     out(true, ['members' => $members]);
   }
 
@@ -1151,8 +1303,8 @@ function groupUpdate(PDO $pdo, array $in): void {
     $drop = (string)($in['member'] ?? '');
     if ($drop === $g['owner']) out(false, ['error' => 'cannot_remove_owner']);
     $members = array_values(array_filter($members, fn($m) => $m !== $drop));
-    $pdo->prepare('UPDATE k_groups SET members = ? WHERE gid = ?')
-        ->execute([json_encode($members), $gid]);
+    $admins = array_values(array_filter($admins, fn($m) => $m !== $drop));
+    $save(['members' => json_encode($members), 'admins' => json_encode($admins)]);
     out(true, ['members' => $members]);
   }
 
@@ -1161,11 +1313,14 @@ function groupUpdate(PDO $pdo, array $in): void {
 
 function groupInfo(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
+  groupMigrate($pdo);
   $gid = (string)($in['gid'] ?? '');
   $st = $pdo->prepare('SELECT * FROM k_groups WHERE gid = ?'); $st->execute([$gid]);
   $g = $st->fetch();
   if (!$g) out(false, ['error' => 'group_not_found']);
-  out(true, ['group' => ['gid'=>$g['gid'],'name'=>$g['name'],'owner'=>$g['owner'],'members'=>json_decode($g['members'],true)]]);
+  $v = groupView($g);
+  if (!in_array($me['kal_id'], $v['members'], true)) out(false, ['error' => 'not_a_member']);
+  out(true, ['group' => $v]);
 }
 function groupSend(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
@@ -1175,10 +1330,17 @@ function groupSend(PDO $pdo, array $in): void {
   $blob = (string)($in['blob'] ?? '');
   $cid = substr((string)($in['client_id'] ?? ''), 0, 32);
   if ($blob === '' || strlen($blob) > 900000) out(false, ['error' => 'bad_input']);
-  $st = $pdo->prepare('SELECT members FROM k_groups WHERE gid = ?'); $st->execute([$gid]);
+  groupMigrate($pdo);
+  $st = $pdo->prepare('SELECT * FROM k_groups WHERE gid = ?'); $st->execute([$gid]);
   $g = $st->fetch();
   if (!$g) out(false, ['error' => 'group_not_found']);
-  $members = json_decode($g['members'], true) ?: [];
+  $v = groupView($g);
+  $members = $v['members'];
+  // only members may post, and only admins when the group is set that way
+  if (!in_array($me['kal_id'], $members, true)) out(false, ['error' => 'not_a_member']);
+  if ($v['settings']['send'] === 'admins' && !in_array($me['kal_id'], $v['admins'], true)) {
+    out(false, ['error' => 'admins_only']);
+  }
   foreach ($members as $mm) {
     if ($mm === $me['kal_id']) continue;
     deliver($pdo, $mm, $me['kal_id'], $cid, $iv, $blob);
