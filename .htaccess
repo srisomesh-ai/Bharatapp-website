@@ -11,8 +11,3 @@ RewriteRule ^add/([A-Za-z0-9_]{3,20})/?$ /?add=$1 [R=302,L]
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 </IfModule>
-<IfModule LiteSpeed>
-  <FilesMatch "\.(html?)$">
-    CacheLookup off
-  </FilesMatch>
-</IfModule>
