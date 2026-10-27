@@ -3,7 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-<meta name="build" content="2.9 · home button">
+<script>
+// Some phones (small "display size" setting) report a 480-767px wide screen,
+// so everything looks tiny. Lay the page out at a normal phone width there and
+// let the browser scale it up to fill the screen. Tablets and PCs are untouched.
+(function(){
+  var m=document.querySelector('meta[name=viewport]'),base=m.content;
+  function fit(){
+    var w=Math.min(screen.width,screen.height),touch=matchMedia('(pointer:coarse)').matches;
+    var portrait=screen.height>=screen.width;
+    m.content=(touch&&portrait&&w>=480&&w<768)?'width=420, viewport-fit=cover, user-scalable=no':base;
+  }
+  fit();addEventListener('orientationchange',function(){setTimeout(fit,150)});
+})();
+</script>
+<meta name="build" content="3.0 · phone size">
 <meta name="theme-color" content="#0D1120">
 <title>BharatApp Chat — Private messenger. No phone number.</title>
 <meta name="description" content="BharatApp Chat is a private messenger with no phone number. End-to-end encrypted, data stays on your phone. Made in India.">
