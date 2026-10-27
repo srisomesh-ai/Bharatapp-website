@@ -80,7 +80,8 @@ function register(PDO $pdo, array $in): void {
   $username = strtolower(trim((string)($in['username'] ?? ''), " @"));
   $pubkey = $in['pubkey'] ?? null; // JWK (public only)
   if ($name === '' || mb_strlen($name) > 24 || !is_array($pubkey)) out(false, ['error' => 'bad_input']);
-  if (!preg_match('/^[a-z0-9_]{3,20}$/', $username)) out(false, ['error' => 'bad_username']);
+  // new usernames: 4–30 characters (3-letter names are held back for now)
+  if (!preg_match('/^[a-z0-9_]{4,30}$/', $username)) out(false, ['error' => 'bad_username']);
   // Every new account is tied to a verified Gmail address. It is kept on the
   // server only — lookups, profiles and contacts never return it. A persona
   // made from an account that is already signed in takes that account's email.
@@ -138,7 +139,7 @@ function lookup(PDO $pdo, array $in): void {
     $st->execute([strtoupper($h)]);
   } else {
     $u = strtolower(trim($h, " @"));
-    if (!preg_match('/^[a-z0-9_]{3,20}$/', $u)) out(false, ['error' => 'bad_id']);
+    if (!preg_match('/^[a-z0-9_]{3,30}$/', $u)) out(false, ['error' => 'bad_id']);
     $st = $pdo->prepare('SELECT kal_id, username, name, pubkey FROM k_users WHERE username = ?');
     $st->execute([$u]);
   }
@@ -297,7 +298,7 @@ function profileUpdate(PDO $pdo, array $in): void {
    to an attacker — the salt alone can't unlock anything. */
 function recoverSalt(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
-  if (!preg_match('/^[a-z0-9_]{3,20}$/', $u)) out(false, ['error' => 'bad_username']);
+  if (!preg_match('/^[a-z0-9_]{3,30}$/', $u)) out(false, ['error' => 'bad_username']);
   try {
     $st = $pdo->prepare('SELECT salt, verifier, key_username FROM k_users WHERE username = ?');
     $st->execute([$u]);
@@ -318,7 +319,7 @@ function recoverLogin(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
   $verifier = (string)($in['verifier'] ?? '');
   $pubkey = $in['pubkey'] ?? null;
-  if (!preg_match('/^[a-z0-9_]{3,20}$/', $u) || $verifier === '' || !is_array($pubkey)) {
+  if (!preg_match('/^[a-z0-9_]{3,30}$/', $u) || $verifier === '' || !is_array($pubkey)) {
     out(false, ['error' => 'bad_input']);
   }
   $st = $pdo->prepare('SELECT kal_id, name, verifier FROM k_users WHERE username = ?');
@@ -365,6 +366,8 @@ function clientIp(): string {
 function emailOtpSend(PDO $pdo, array $in): void {
   $email = normalizeGmail((string)($in['email'] ?? ''));
   if ($email === null) out(false, ['error' => 'bad_email']);
+  // sign-up: say so before sending a code if this Gmail already has an account
+  if (emailInUse($pdo, $email)) out(false, ['error' => 'email_in_use']);
   issueCode($pdo, $email);
   out(true, ['sent' => true, 'email' => $email]);
 }
@@ -402,7 +405,7 @@ function issueCode(PDO $pdo, string $email): void {
 function loginAccount(PDO $pdo, array $in): array {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
   $email = normalizeGmail((string)($in['email'] ?? ''));
-  if (!preg_match('/^[a-z0-9_]{3,20}$/', $u)) out(false, ['error' => 'bad_username']);
+  if (!preg_match('/^[a-z0-9_]{3,30}$/', $u)) out(false, ['error' => 'bad_username']);
   if ($email === null) out(false, ['error' => 'bad_email']);
   $st = $pdo->prepare('SELECT kal_id, username, name, pubkey, email, salt, verifier, disabled FROM k_users WHERE username = ?');
   $st->execute([$u]);
@@ -458,7 +461,7 @@ function newDeviceSession(PDO $pdo, array $r, string $device): array {
 function loginPassword(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
   $verifier = (string)($in['verifier'] ?? '');
-  if (!preg_match('/^[a-z0-9_]{3,20}$/', $u) || $verifier === '') out(false, ['error' => 'bad_input']);
+  if (!preg_match('/^[a-z0-9_]{3,30}$/', $u) || $verifier === '') out(false, ['error' => 'bad_input']);
   try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS k_trusted (
       hash CHAR(64) PRIMARY KEY, kal_id VARCHAR(20) NOT NULL, created_at DATETIME NOT NULL,
@@ -664,10 +667,15 @@ function registrationEmail(PDO $pdo, array $in): ?string {
   if ($email === null) out(false, ['error' => 'bad_email']);
   checkEmailCode($pdo, $email, trim((string)($in['email_code'] ?? '')));
 
-  $st = $pdo->prepare('SELECT COUNT(*) FROM k_users WHERE email = ?');
-  $st->execute([$email]);
-  if ((int)$st->fetchColumn() >= 5) out(false, ['error' => 'email_limit']);
+  // one account per Gmail
+  if (emailInUse($pdo, $email)) out(false, ['error' => 'email_in_use']);
   return $email;
+}
+
+function emailInUse(PDO $pdo, string $email): bool {
+  $st = $pdo->prepare('SELECT 1 FROM k_users WHERE email = ? LIMIT 1');
+  $st->execute([$email]);
+  return (bool)$st->fetchColumn();
 }
 
 /* ---------------- forwarded-message tracing ----------------
@@ -694,7 +702,7 @@ function logForward(PDO $pdo, array $in, string $kalId): void {
 function changeUsername(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
   $new = strtolower(trim((string)($in['username'] ?? ''), " @"));
-  if (!preg_match('/^[a-z0-9_]{3,20}$/', $new)) out(false, ['error' => 'bad_username']);
+  if (!preg_match('/^[a-z0-9_]{4,30}$/', $new)) out(false, ['error' => 'bad_username']);
   // rate limit: once per 30 days
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN username_changed_at DATETIME NULL"); } catch (Throwable $e) {}
   $st = $pdo->prepare('SELECT username, username_changed_at FROM k_users WHERE kal_id = ?');
@@ -717,7 +725,8 @@ function changeUsername(PDO $pdo, array $in): void {
 
 function checkUsername(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
-  if (!preg_match('/^[a-z0-9_]{3,20}$/', $u)) out(true, ['available' => false, 'reason' => 'invalid']);
+  if (strlen($u) === 3 && preg_match('/^[a-z0-9_]+$/', $u)) out(true, ['available' => false, 'reason' => 'too_short']);
+  if (!preg_match('/^[a-z0-9_]{4,30}$/', $u)) out(true, ['available' => false, 'reason' => 'invalid']);
   $st = $pdo->prepare('SELECT last_seen FROM k_users WHERE username = ?'); $st->execute([$u]);
   $ex = $st->fetch();
   $avail = !$ex || strtotime($ex['last_seen']) < time() - 90*86400;
@@ -1466,7 +1475,7 @@ function kalId(): string {
 function migrate(PDO $pdo): void {
   $pdo->exec("CREATE TABLE IF NOT EXISTS k_users (
     kal_id VARCHAR(14) PRIMARY KEY,
-    username VARCHAR(20) NOT NULL DEFAULT '',
+    username VARCHAR(32) NOT NULL DEFAULT '',
     name VARCHAR(48) NOT NULL,
     pubkey TEXT NOT NULL,
     token VARCHAR(64) NOT NULL,
@@ -1479,6 +1488,9 @@ function migrate(PDO $pdo): void {
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN email VARCHAR(254) NULL"); } catch (Throwable $e) {}
   // the username the account key was derived from (it stays when the @username changes)
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN key_username VARCHAR(20) NULL"); } catch (Throwable $e) {}
+  // usernames can now be up to 30 characters
+  try { $pdo->exec("ALTER TABLE k_users MODIFY username VARCHAR(32) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+  try { $pdo->exec("ALTER TABLE k_users MODIFY key_username VARCHAR(32) NULL"); } catch (Throwable $e) {}
   try { $pdo->exec("CREATE INDEX idx_email ON k_users (email)"); } catch (Throwable $e) {}
   $pdo->exec("CREATE TABLE IF NOT EXISTS k_email_otp (
     email VARCHAR(254) PRIMARY KEY,

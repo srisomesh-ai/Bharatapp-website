@@ -52,10 +52,10 @@
             <h1 class="lp-h1">Pick a username.<br>That's your number now.</h1>
             <p class="lp-lead">BharatApp Chat works with a username you choose, not your phone number. Messages are encrypted on your phone and deleted from our server the moment they are delivered.</p>
             <form class="lp-claim" onsubmit="lpClaim();return false" autocomplete="off">
-              <label class="lp-field" for="lp-user"><span>@</span><input id="lp-user" maxlength="20" placeholder="yourname" autocapitalize="none" spellcheck="false" oninput="lpCheck()" aria-describedby="lp-status"></label>
+              <label class="lp-field" for="lp-user"><span>@</span><input id="lp-user" maxlength="30" placeholder="yourname" autocapitalize="none" spellcheck="false" oninput="lpCheck()" aria-describedby="lp-status"></label>
               <button class="lp-btn" type="submit">Claim it</button>
             </form>
-            <div class="lp-status" id="lp-status">3–20 letters, numbers or _</div>
+            <div class="lp-status" id="lp-status">At least 4 letters, numbers or _</div>
             <div class="lp-alt">
               <a class="lp-tl" href="https://play.google.com/store/apps/details?id=com.messenger.app">Get the Android app →</a>
               <span>Free · No ads · Already have an account? <button class="lp-inline" onclick="landRestore()">Log in</button></span>
@@ -136,7 +136,7 @@
         </div>
         <div class="field" style="margin-top:12px">
           <label for="ob-user">Choose your @username</label>
-          <input id="ob-user" maxlength="20" placeholder="e.g. somu" autocomplete="off" autocapitalize="none" style="font-family:var(--mono)">
+          <input id="ob-user" maxlength="30" placeholder="e.g. somu" autocomplete="off" autocapitalize="none" style="font-family:var(--mono)">
         </div>
         <div class="field" style="margin-top:12px">
           <label for="ob-email">Your Gmail (kept private)</label>
@@ -164,7 +164,7 @@
           <form onsubmit="lgLogin();return false" autocomplete="on">
             <div class="field">
               <label for="lg-user">Username</label>
-              <input id="lg-user" maxlength="21" placeholder="@username" autocomplete="username" autocapitalize="none" spellcheck="false">
+              <input id="lg-user" maxlength="31" placeholder="@username" autocomplete="username" autocapitalize="none" spellcheck="false">
             </div>
             <div class="field" style="margin-top:12px">
               <label for="lg-pass">Password</label>

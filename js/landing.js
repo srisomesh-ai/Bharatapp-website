@@ -10,7 +10,7 @@ function inviteLink(username){ return 'https://bharatapp.chat/add/'+username; }
 /* Returns true when the page was opened from an invite and handled it. */
 function handleInvite(){
   const u=(new URLSearchParams(location.search).get('add')||'').toLowerCase();
-  if(!/^[a-z0-9_]{3,20}$/.test(u))return false;
+  if(!/^[a-z0-9_]{3,30}$/.test(u))return false;
   history.replaceState(null,'',location.pathname);
   // Android: open the app if it's installed, otherwise the Play Store
   if(/Android/i.test(navigator.userAgent)&&!isNativeApp()){
@@ -100,8 +100,8 @@ function lpCheck(){
   const el=$('lp-user'); const v=el.value.replace(/^@+/,'').toLowerCase().replace(/[^a-z0-9_]/g,'');
   if(v!==el.value)el.value=v;
   _lpOk=''; clearTimeout(_lpTimer);
-  if(!v){ _lpStatus('3–20 letters, numbers or _'); return; }
-  if(v.length<3){ _lpStatus('At least 3 characters'); return; }
+  if(!v){ _lpStatus('At least 4 letters, numbers or _'); return; }
+  if(v.length<4){ _lpStatus('At least 4 characters'); return; }
   _lpStatus('Checking @'+v+'…');
   const seq=++_lpSeq;
   _lpTimer=setTimeout(async()=>{
@@ -109,6 +109,7 @@ function lpCheck(){
       const r=await api('check',{username:v});
       if(seq!==_lpSeq)return;
       if(r.available){ _lpOk=v; _lpStatus('✓ @'+v+' is available','ok'); }
+      else if(r.reason==='too_short') _lpStatus('Usernames need at least 4 characters','bad');
       else _lpStatus('@'+v+' is taken — try another','bad');
     }catch(e){ if(seq===_lpSeq)_lpStatus('Could not check right now — try again'); }
   },350);
@@ -147,7 +148,7 @@ function _setTrust(u,t){ try{ localStorage.setItem(_trustKey(u),t); }catch(e){} 
 let _lgKeys=null; // {u,pass,keys,verifier} — so the code step doesn't redo the slow key maths
 async function lgLogin(){
   const u=_lgUser(), pass=$('lg-pass').value, code=($('lg-code').value||'').trim();
-  if(!/^[a-z0-9_]{3,20}$/.test(u)){lgMsg('Enter your @username');return;}
+  if(!/^[a-z0-9_]{3,30}$/.test(u)){lgMsg('Enter your @username');return;}
   if(!pass){lgMsg('Enter your password');return;}
   const codeStep=!$('lg-step2').classList.contains('hide');
   if(codeStep && !/^\d{6}$/.test(code)){lgMsg('Enter the 6-digit code from your Gmail');return;}
