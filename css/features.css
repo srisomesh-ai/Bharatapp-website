@@ -230,7 +230,7 @@
 
 /* ============ Desktop (PC browser): full window, chats left + chat right ============ */
 #desk-empty{display:none}
-@media (min-width:900px){
+@media (min-width:768px){
   body{background:var(--bg)}
   #phone,:root[data-theme=light] #phone{max-width:none;box-shadow:none}
   /* landing + sign-up use the full window; their content stays a readable width */

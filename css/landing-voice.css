@@ -110,3 +110,46 @@
 #scr-landing .trust-line{color:#5A6180}
 #scr-landing .land-foot{color:#5A6180}
 #scr-landing .feat{background:linear-gradient(160deg,rgba(22,28,48,.9),rgba(18,23,40,.7));border-color:rgba(255,255,255,.06)}
+
+/* ============ Landing on a computer: a real website, not a stretched phone page ============ */
+.land-links,.land-get{display:none}
+.land-actions{display:flex;align-items:center;gap:10px}
+@media (min-width:900px){
+  .land-nav{padding:16px max(32px,calc((100% - 1160px)/2))}
+  .land-logo{font-size:22px}
+  .land-links{display:flex;gap:30px;margin-left:56px;margin-right:auto}
+  .land-links a{color:#AEB4C8;text-decoration:none;font-size:15px;font-weight:600}
+  .land-links a:hover{color:#fff}
+  .land-get{display:inline-flex;width:auto;padding:10px 20px;font-size:14.5px;border-radius:22px;margin:0}
+  .land-login{padding:10px 20px;font-size:14.5px}
+
+  .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);column-gap:64px;align-items:center;
+        text-align:left;padding:72px max(32px,calc((100% - 1160px)/2)) 56px}
+  .hero>*{grid-column:1}
+  .hero-badge{justify-self:start}
+  .hero-h1{font-size:clamp(56px,6vw,80px)}
+  .hero-sub{font-size:18.5px;max-width:540px;margin:0 0 30px}
+  .hero-cta{flex-direction:row;max-width:none;margin:0 0 18px}
+  .hero-cta .btn{width:auto;padding:15px 28px}
+  .trust-line{justify-content:flex-start}
+  .hero-phone{grid-column:2;grid-row:1 / span 5;margin:0;max-width:380px;justify-self:center;width:100%}
+  .hp-frame{padding:22px;gap:12px;border-radius:30px}
+  .hp-bubble{font-size:15px}
+
+  .land-sec{padding:80px 32px}
+  .land-sec>*{max-width:1160px;margin-left:auto;margin-right:auto}
+  .land-h2{font-size:40px}
+  .land-lede{font-size:17px;max-width:640px;margin-bottom:44px}
+  .feat-grid{grid-template-columns:repeat(3,1fr);gap:20px}
+  .feat{padding:26px}
+  .feat:hover{transform:translateY(-3px);border-color:rgba(245,168,60,.3)}
+  .feat h3{font-size:18px}
+  .feat p{font-size:14.5px}
+  .how-steps{grid-template-columns:repeat(4,1fr);max-width:1160px;gap:28px}
+  .how-step{flex-direction:column}
+  .land-quote{padding:40px 32px 70px}
+  .lq-text{font-size:28px;max-width:780px}
+  .land-final{padding:30px 32px 56px}
+  .land-final .land-h2{font-size:44px}
+  .land-foot{font-size:13px}
+}
