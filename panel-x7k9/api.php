@@ -119,10 +119,11 @@ function deleteUser(PDO $pdo, array $in): void {
   $pdo->prepare('DELETE FROM k_queue WHERE to_id = ? OR from_id = ?')->execute([$kid,$kid]);
   $pdo->prepare('DELETE FROM k_status WHERE kal_id = ?')->execute([$kid]);
   $pdo->prepare('DELETE FROM k_blocks WHERE blocker = ? OR blocked = ?')->execute([$kid,$kid]);
+  try { $pdo->prepare('DELETE FROM k_devices WHERE kal_id = ?')->execute([$kid]); } catch (Throwable $e) {}
   out(true, ['deleted' => $kid]);
 }
 function wipeAll(PDO $pdo): void {
-  foreach (['k_queue','k_receipts','k_users','k_contacts','k_status','k_status_views','k_status_reacts','k_blocks','k_groups','k_fwd_log','k_email_otp','k_otp_log'] as $t) {
+  foreach (['k_queue','k_receipts','k_users','k_contacts','k_status','k_status_views','k_status_reacts','k_blocks','k_groups','k_fwd_log','k_email_otp','k_otp_log','k_devices'] as $t) {
     try { $pdo->exec("DELETE FROM $t"); } catch (Throwable $e) {}
   }
   out(true, ['wiped' => true]);

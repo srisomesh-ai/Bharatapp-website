@@ -26,6 +26,10 @@ $action = $in['action'] ?? ($_GET['action'] ?? '');
 try {
   switch ($action) {
     case 'email_otp_send': emailOtpSend($pdo, $in); break;
+    case 'login_otp_send':   loginOtpSend($pdo, $in); break;
+    case 'login_otp_verify': loginOtpVerify($pdo, $in); break;
+    case 'device_list':   deviceList($pdo, $in); break;
+    case 'device_remove': deviceRemove($pdo, $in); break;
     case 'register':  register($pdo, $in); break;
     case 'lookup':    lookup($pdo, $in); break;
     case 'send':      send($pdo, $in); break;
@@ -161,8 +165,8 @@ function send(PDO $pdo, array $in): void {
   $st->execute([$me['kal_id'],$to,$to,$me['kal_id']]);
   $rel = $st->fetch();
   if (!$rel || $rel['status'] !== 'accepted') out(false, ['error' => 'not_connected']);
-  $st = $pdo->prepare('INSERT INTO k_queue (to_id, from_id, client_id, iv, payload, created_at) VALUES (?,?,?,?,?,NOW())');
-  $st->execute([$to, $me['kal_id'], $cid, $iv, $blob]);
+  deliver($pdo, $to, $me['kal_id'], $cid, $iv, $blob);
+  if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $to, $cid, $iv, $blob);
   logForward($pdo, $in, $me['kal_id']);
   // best-effort push (content stays private — generic text only)
   $sname = '';
@@ -186,21 +190,33 @@ function fetchMsgs(PDO $pdo, array $in): void {
   $out = ['messages' => [], 'receipts' => []];
 
   // 1) drain my incoming messages, deleting each and issuing a deletion receipt to the sender
-  $st = $pdo->prepare('SELECT * FROM k_queue WHERE to_id = ? ORDER BY id ASC LIMIT 100');
-  $st->execute([$me['kal_id']]);
+  // Each logged-in device has its own copy, so the phone and the browser
+  // both get every message.
+  $st = $pdo->prepare('SELECT * FROM k_queue WHERE to_id = ? AND dev = ? ORDER BY id ASC LIMIT 100');
+  $st->execute([$me['kal_id'], $me['dev']]);
   $rows = $st->fetchAll();
   foreach ($rows as $r) {
     $pdo->prepare('DELETE FROM k_queue WHERE id = ?')->execute([$r['id']]);
     $receipt = hash('sha256', $r['id'].'|'.$r['payload'].'|'.microtime(true).'|deleted');
-    // receipt back to sender: proof the relay destroyed its copy (contains no content)
-    $pdo->prepare('INSERT INTO k_receipts (to_id, client_id, receipt, created_at) VALUES (?,?,?,NOW())')
-        ->execute([$r['from_id'], $r['client_id'], $receipt]);
+    if ($r['peer'] !== '') {
+      // a message I sent from another of my devices — "to" says which chat
+      $out['messages'][] = ['from' => $r['from_id'], 'to' => $r['peer'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000];
+      continue;
+    }
+    // receipt back to the sender once the last device has its copy:
+    // proof the relay destroyed every copy (contains no content)
+    $left = $pdo->prepare("SELECT 1 FROM k_queue WHERE to_id = ? AND from_id = ? AND client_id = ? AND peer = '' LIMIT 1");
+    $left->execute([$r['to_id'], $r['from_id'], $r['client_id']]);
+    if (!$left->fetch()) {
+      $ins = $pdo->prepare('INSERT INTO k_receipts (to_id, dev, client_id, receipt, created_at) VALUES (?,?,?,?,NOW())');
+      foreach (deviceIds($pdo, $r['from_id']) as $d) $ins->execute([$r['from_id'], $d, $r['client_id'], $receipt]);
+    }
     $out['messages'][] = ['from' => $r['from_id'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000, 'receipt' => $receipt];
   }
 
   // 2) drain deletion receipts addressed to me (for messages I sent)
-  $st = $pdo->prepare('SELECT * FROM k_receipts WHERE to_id = ? ORDER BY id ASC LIMIT 200');
-  $st->execute([$me['kal_id']]);
+  $st = $pdo->prepare('SELECT * FROM k_receipts WHERE to_id = ? AND dev = ? ORDER BY id ASC LIMIT 200');
+  $st->execute([$me['kal_id'], $me['dev']]);
   $recs = $st->fetchAll();
   foreach ($recs as $r) {
     $pdo->prepare('DELETE FROM k_receipts WHERE id = ?')->execute([$r['id']]);
@@ -208,6 +224,9 @@ function fetchMsgs(PDO $pdo, array $in): void {
   }
 
   $pdo->prepare('UPDATE k_users SET last_seen = NOW() WHERE kal_id = ?')->execute([$me['kal_id']]);
+  if ($me['dev'] !== '') {
+    $pdo->prepare('UPDATE k_devices SET last_seen = NOW() WHERE id = ?')->execute([$me['dev']]);
+  }
   out(true, $out);
 }
 
@@ -330,6 +349,11 @@ function clientIp(): string {
 function emailOtpSend(PDO $pdo, array $in): void {
   $email = normalizeGmail((string)($in['email'] ?? ''));
   if ($email === null) out(false, ['error' => 'bad_email']);
+  issueCode($pdo, $email);
+  out(true, ['sent' => true, 'email' => $email]);
+}
+
+function issueCode(PDO $pdo, string $email): void {
   $ip = clientIp();
 
   $st = $pdo->prepare('SELECT MAX(created_at) AS last, COUNT(*) AS n FROM k_otp_log
@@ -351,7 +375,112 @@ function emailOtpSend(PDO $pdo, array $in): void {
   $pdo->exec('DELETE FROM k_otp_log WHERE created_at < (NOW() - INTERVAL 1 DAY)');
 
   if (!sendOtpMail($email, $code)) out(false, ['error' => 'email_send_failed']);
-  out(true, ['sent' => true, 'email' => $email]);
+}
+
+/* ---------------- login on another device ----------------
+   Username + the account's Gmail must match before a code is sent. The code
+   logs a new device in alongside the others — nobody is logged out. The
+   device then rebuilds the account key from the password (salt is returned)
+   and checks it against the account's public key, so the password itself
+   never reaches the server. */
+function loginAccount(PDO $pdo, array $in): array {
+  $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
+  $email = normalizeGmail((string)($in['email'] ?? ''));
+  if (!preg_match('/^[a-z0-9_]{3,20}$/', $u)) out(false, ['error' => 'bad_username']);
+  if ($email === null) out(false, ['error' => 'bad_email']);
+  $st = $pdo->prepare('SELECT kal_id, username, name, pubkey, email, salt, verifier, disabled FROM k_users WHERE username = ?');
+  $st->execute([$u]);
+  $r = $st->fetch();
+  // same answer for "no such user" and "wrong email", so neither can be probed
+  if (!$r || empty($r['email']) || !hash_equals((string)$r['email'], $email)) out(false, ['error' => 'no_match']);
+  if ((int)$r['disabled'] === 1) out(false, ['error' => 'account_disabled']);
+  return $r + ['_email' => $email];
+}
+
+function loginOtpSend(PDO $pdo, array $in): void {
+  $r = loginAccount($pdo, $in);
+  usleep(200000);
+  issueCode($pdo, $r['_email']);
+  out(true, ['sent' => true]);
+}
+
+function loginOtpVerify(PDO $pdo, array $in): void {
+  $r = loginAccount($pdo, $in);
+  checkEmailCode($pdo, $r['_email'], trim((string)($in['code'] ?? '')));
+  $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$r['_email']]);
+
+  // keep at most 5 extra devices — the longest-unused one makes room
+  $st = $pdo->prepare('SELECT id FROM k_devices WHERE kal_id = ? ORDER BY last_seen DESC');
+  $st->execute([$r['kal_id']]);
+  foreach (array_slice(array_column($st->fetchAll(), 'id'), 4) as $old) dropDevice($pdo, $old);
+
+  $id = bin2hex(random_bytes(8));
+  $token = bin2hex(random_bytes(24));
+  $name = mb_substr(trim((string)($in['device'] ?? '')), 0, 40) ?: 'Device';
+  $pdo->prepare('INSERT INTO k_devices (id, kal_id, token, name, created_at, last_seen) VALUES (?,?,?,?,NOW(),NOW())')
+      ->execute([$id, $r['kal_id'], $token, $name]);
+  out(true, [
+    'kal_id'       => $r['kal_id'],
+    'username'     => $r['username'],
+    'name'         => $r['name'],
+    'token'        => $token,
+    'pubkey'       => json_decode($r['pubkey'], true),
+    'salt'         => (string)($r['salt'] ?? ''),
+    'has_password' => !empty($r['verifier']),
+  ]);
+}
+
+function deviceList(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $st = $pdo->prepare('SELECT id, name, created_at, last_seen FROM k_devices WHERE kal_id = ? ORDER BY last_seen DESC');
+  $st->execute([$me['kal_id']]);
+  out(true, ['devices' => $st->fetchAll(), 'this' => $me['dev']]);
+}
+
+/* Log a device out — your own, or another of yours by id. */
+function deviceRemove(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $id = (string)($in['id'] ?? $me['dev']);
+  $st = $pdo->prepare('SELECT 1 FROM k_devices WHERE id = ? AND kal_id = ?');
+  $st->execute([$id, $me['kal_id']]);
+  if (!$st->fetch()) out(false, ['error' => 'not_found']);
+  dropDevice($pdo, $id);
+  out(true, ['removed' => $id]);
+}
+
+function dropDevice(PDO $pdo, string $id): void {
+  $pdo->prepare('DELETE FROM k_devices WHERE id = ?')->execute([$id]);
+  $pdo->prepare('DELETE FROM k_queue WHERE dev = ?')->execute([$id]);
+  $pdo->prepare('DELETE FROM k_receipts WHERE dev = ?')->execute([$id]);
+}
+
+/* Every device of an account: '' is the phone it was created on, plus any
+   device logged in since (unused for 30 days = dropped). */
+function deviceIds(PDO $pdo, string $kalId): array {
+  static $cache = [];
+  if (isset($cache[$kalId])) return $cache[$kalId];
+  $st = $pdo->prepare('SELECT id FROM k_devices WHERE kal_id = ? AND last_seen < (NOW() - INTERVAL 30 DAY)');
+  $st->execute([$kalId]);
+  foreach (array_column($st->fetchAll(), 'id') as $old) dropDevice($pdo, $old);
+  $st = $pdo->prepare('SELECT id FROM k_devices WHERE kal_id = ?');
+  $st->execute([$kalId]);
+  return $cache[$kalId] = array_merge([''], array_column($st->fetchAll(), 'id'));
+}
+
+/* Queue one copy per device of the recipient. */
+function deliver(PDO $pdo, string $to, string $from, string $cid, string $iv, string $blob): void {
+  $ins = $pdo->prepare("INSERT INTO k_queue (to_id, dev, from_id, peer, client_id, iv, payload, created_at) VALUES (?,?,?,'',?,?,?,NOW())");
+  foreach (deviceIds($pdo, $to) as $d) $ins->execute([$to, $d, $from, $cid, $iv, $blob]);
+}
+
+/* A copy of what I just sent, for my other devices, so the chat looks the
+   same everywhere. Same ciphertext — every device holds the same key. */
+function echoToMyDevices(PDO $pdo, array $me, string $peer, string $cid, string $iv, string $blob): void {
+  $ins = $pdo->prepare('INSERT INTO k_queue (to_id, dev, from_id, peer, client_id, iv, payload, created_at) VALUES (?,?,?,?,?,?,?,NOW())');
+  foreach (deviceIds($pdo, $me['kal_id']) as $d) {
+    if ($d === $me['dev']) continue;
+    $ins->execute([$me['kal_id'], $d, $me['kal_id'], $peer, $cid, $iv, $blob]);
+  }
 }
 
 function sendOtpMail(string $to, string $code): bool {
@@ -963,11 +1092,11 @@ function groupSend(PDO $pdo, array $in): void {
   $g = $st->fetch();
   if (!$g) out(false, ['error' => 'group_not_found']);
   $members = json_decode($g['members'], true) ?: [];
-  $ins = $pdo->prepare('INSERT INTO k_queue (to_id, from_id, client_id, iv, payload, created_at) VALUES (?,?,?,?,?,NOW())');
   foreach ($members as $mm) {
     if ($mm === $me['kal_id']) continue;
-    $ins->execute([$mm, $me['kal_id'], $cid, $iv, $blob]);
+    deliver($pdo, $mm, $me['kal_id'], $cid, $iv, $blob);
   }
+  if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $gid, $cid, $iv, $blob);
   logForward($pdo, $in, $me['kal_id']);
   out(true, ['sent' => true, 'gid' => $gid]);
 }
@@ -978,9 +1107,15 @@ function auth(PDO $pdo, array $in): array {
   $kid = strtoupper(trim((string)($in['kal_id'] ?? '')));
   $token = (string)($in['token'] ?? '');
   if ($kid === '' || $token === '') out(false, ['error' => 'auth_required']);
-  $st = $pdo->prepare('SELECT kal_id, disabled FROM k_users WHERE kal_id = ? AND token = ?');
+  $st = $pdo->prepare("SELECT kal_id, disabled, '' AS dev FROM k_users WHERE kal_id = ? AND token = ?");
   $st->execute([$kid, $token]);
   $u = $st->fetch();
+  if (!$u) {
+    $st = $pdo->prepare('SELECT u.kal_id, u.disabled, d.id AS dev FROM k_devices d
+                         JOIN k_users u ON u.kal_id = d.kal_id WHERE d.kal_id = ? AND d.token = ?');
+    $st->execute([$kid, $token]);
+    $u = $st->fetch();
+  }
   if (!$u) out(false, ['error' => 'auth_failed']);
   if ((int)($u['disabled'] ?? 0) === 1) out(false, ['error' => 'account_disabled']);
   return $u;
@@ -1019,6 +1154,15 @@ function migrate(PDO $pdo): void {
     ip VARCHAR(45) NOT NULL,
     created_at DATETIME NOT NULL,
     KEY idx_email (email), KEY idx_ip (ip)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_devices (
+    id VARCHAR(16) PRIMARY KEY,
+    kal_id VARCHAR(14) NOT NULL,
+    token VARCHAR(64) NOT NULL,
+    name VARCHAR(40) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL,
+    last_seen DATETIME NOT NULL,
+    KEY idx_kal (kal_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   $pdo->exec("CREATE TABLE IF NOT EXISTS k_fwd_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -1079,6 +1223,8 @@ function migrate(PDO $pdo): void {
     created_at DATETIME NOT NULL,
     KEY idx_to (to_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  try { $pdo->exec("ALTER TABLE k_queue ADD COLUMN dev VARCHAR(16) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+  try { $pdo->exec("ALTER TABLE k_queue ADD COLUMN peer VARCHAR(16) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
   $pdo->exec("CREATE TABLE IF NOT EXISTS k_receipts (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     to_id VARCHAR(14) NOT NULL,
@@ -1087,6 +1233,7 @@ function migrate(PDO $pdo): void {
     created_at DATETIME NOT NULL,
     KEY idx_to (to_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  try { $pdo->exec("ALTER TABLE k_receipts ADD COLUMN dev VARCHAR(16) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
 }
 
 function out(bool $ok, array $data = []): void {
