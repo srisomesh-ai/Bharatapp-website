@@ -166,6 +166,14 @@ function send(PDO $pdo, array $in): void {
   $st->execute([$me['kal_id'],$to,$to,$me['kal_id']]);
   $rel = $st->fetch();
   if (!$rel || $rel['status'] !== 'accepted') out(false, ['error' => 'not_connected']);
+  // "typing" and live-typing signals: only worth delivering to someone who is
+  // online right now, never stored for later, never a notification
+  if (!empty($in['live'])) {
+    $st = $pdo->prepare('SELECT 1 FROM k_users WHERE kal_id = ? AND last_seen > (NOW() - INTERVAL 60 SECOND)');
+    $st->execute([$to]);
+    if ($st->fetchColumn()) deliver($pdo, $to, $me['kal_id'], $cid, $iv, $blob);
+    out(true, ['queued' => true]);
+  }
   deliver($pdo, $to, $me['kal_id'], $cid, $iv, $blob);
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $to, $cid, $iv, $blob);
   logForward($pdo, $in, $me['kal_id']);

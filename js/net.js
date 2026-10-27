@@ -182,6 +182,15 @@ async function pollOnce(){
       if(m){ m.reactions=m.reactions||{}; if(body.emoji)m.reactions.them=body.emoji; else delete m.reactions.them; }
       continue;
     }
+    if(body.kind==='typing'||body.kind==='draft'){ // peer is typing (the app may also send the words)
+      if(curChat===c.id && typeof setSub==='function' && (body.kind==='typing'||body.text)){
+        setSub('typing…',true); clearTimeout(c._typingT);
+        c._typingT=setTimeout(()=>{ if(curChat===c.id){ setSub(''); if(typeof fetchPresence==='function')fetchPresence(c); } },5000);
+      }
+      continue;
+    }
+    // anything else that isn't a message (call signals, receipts…) is not shown
+    if(!['text','img','voice','file'].includes(body.kind)){ continue; }
     const ch=chat(c.id);
     const m={id:body.cid||uid(),from:'them',kind:body.kind,text:body.text||'',img:body.img||null,
              audio:body.audio||null,wave:body.wave||null,dur:body.dur||0,
