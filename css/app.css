@@ -230,3 +230,4 @@ input,textarea,select{font-family:inherit;font-size:16px;color:var(--text)}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 
 .ob-why{font-size:12.5px;line-height:1.45;color:#8A91AB;margin:7px 2px 0}
+#scr-onboard .ob-lockup{height:34px;width:auto;display:block}

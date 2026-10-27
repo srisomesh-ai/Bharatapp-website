@@ -18,3 +18,5 @@ th{color:var(--text)}
 td{color:var(--muted)}
 .table-scroll{overflow-x:auto}
 .foot{margin-top:40px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px}
+.top .lockup{height:38px;width:auto;display:block;border-radius:0}
+@media (prefers-color-scheme:dark){.top .lockup{background:#fff;padding:6px 10px;border-radius:10px;height:44px}}
