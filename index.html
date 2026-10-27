@@ -17,8 +17,8 @@
   fit();addEventListener('orientationchange',function(){setTimeout(fit,150)});
 })();
 </script>
-<meta name="build" content="3.0 · phone size">
-<meta name="theme-color" content="#0D1120">
+<meta name="build" content="3.2 · new home page">
+<meta name="theme-color" content="#FBFAF6">
 <title>BharatApp Chat — Private messenger. No phone number.</title>
 <meta name="description" content="BharatApp Chat is a private messenger with no phone number. End-to-end encrypted, data stays on your phone. Made in India.">
 <link rel="icon" href="/icons/bharatapp.ico" sizes="48x48">
@@ -27,9 +27,10 @@
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Newsreader:opsz,wght@6..72,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css?v=3.1">
 <link rel="stylesheet" href="css/landing-voice.css?v=3.0">
+<link rel="stylesheet" href="css/landing.css?v=2">
 <link rel="stylesheet" href="css/features.css?v=3.0">
 </head>
 <body>
@@ -37,103 +38,74 @@
 <div id="phone">
   <!-- ============ LANDING (marketing homepage) ============ -->
   <div class="scr on" id="scr-landing">
-    <div class="land-scroll">
-      <header class="land-nav">
-        <div class="land-logo">
-          <img src="/icons/bharatapp-192.png" alt="" class="brand-ic">
-          <span class="wm">Bharat<b>App</b> <i>Chat</i></span>
-        </div>
-        <nav class="land-links">
-          <a href="#features">Features</a>
-          <a href="#how">How it works</a>
-          <a href="/privacy.html">Privacy</a>
-        </nav>
-        <div class="land-actions">
-          <button class="land-login" onclick="landRestore()">Log in</button>
-          <button class="btn hero-start land-get" onclick="landStart()">Get started</button>
-        </div>
-      </header>
+    <div class="land-scroll lp">
+      <div class="lp-w">
+        <header class="lp-nav">
+          <a class="lp-brand" href="/"><img src="/icons/bharatapp-192.png" alt="">BharatApp Chat</a>
+          <nav class="lp-links"><a href="#how">How it works</a><a href="#know">Privacy</a><a href="mailto:support@bharatapp.chat">Help</a></nav>
+          <button class="lp-login" onclick="landRestore()">Log in</button>
+        </header>
 
-      <section class="hero">
-        <div class="hero-badge">🔒 End-to-end encrypted · Made in India</div>
-        <h1 class="hero-h1">Your privacy,<br><em>respected.</em></h1>
-        <p class="hero-sub">BharatApp Chat is a messenger built on a simple belief — <b>your conversations belong to you.</b> No phone number to share, no data harvested, no one reading over your shoulder. Just honest, secure conversation between you and the people you trust.</p>
-        <div class="hero-cta">
-          <button class="btn hero-start" onclick="landStart()">Create your free account</button>
-          <button class="btn ghost" onclick="landRestore()">I already have an account</button>
-        </div>
-        <div class="trust-line">
-          <span>✓ No ads</span><span>✓ No tracking</span><span>✓ No phone number</span>
-        </div>
-        <div class="hero-phone">
-          <div class="hp-frame">
-            <div class="hp-secure">🔒 End-to-end encrypted</div>
-            <div class="hp-bubble them">Is this really private?</div>
-            <div class="hp-bubble me">Fully. Not even BharatApp Chat can read it 💛<span class="hp-tick">✓✓</span></div>
-            <div class="hp-bubble them">No number needed either?</div>
-            <div class="hp-bubble me">Just my @username. That's it.<span class="hp-tick">✓✓</span></div>
+        <section class="lp-hero">
+          <div>
+            <div class="lp-kicker">Messenger · Made in Bengaluru</div>
+            <h1 class="lp-h1">Pick a username.<br>That's your number now.</h1>
+            <p class="lp-lead">BharatApp Chat works with a username you choose, not your phone number. Messages are encrypted on your phone and deleted from our server the moment they are delivered.</p>
+            <form class="lp-claim" onsubmit="lpClaim();return false" autocomplete="off">
+              <label class="lp-field" for="lp-user"><span>@</span><input id="lp-user" maxlength="20" placeholder="yourname" autocapitalize="none" spellcheck="false" oninput="lpCheck()" aria-describedby="lp-status"></label>
+              <button class="lp-btn" type="submit">Claim it</button>
+            </form>
+            <div class="lp-status" id="lp-status">3–20 letters, numbers or _</div>
+            <div class="lp-alt">
+              <a class="lp-tl" href="https://play.google.com/store/apps/details?id=com.messenger.app">Get the Android app →</a>
+              <span>Free · No ads · Already have an account? <button class="lp-inline" onclick="landRestore()">Log in</button></span>
+            </div>
           </div>
-        </div>
-      </section>
+          <div class="lp-vis" aria-hidden="true">
+            <div class="ph"><div class="ph-scr">
+              <div class="ph-top"><span class="ph-av">RK</span><div><b>Ravi Kumar</b><small>online</small></div></div>
+              <div class="ph-body">
+                <div class="ph-day">Today</div>
+                <div class="pb in">Reached Majestic. Where are you?</div>
+                <div class="pb out">5 min, near the metro gate<i>10:42 ✓✓</i></div>
+                <div class="pb in">Ok. Sending the ticket</div>
+                <div class="pb in file"><span>PDF</span>KSR-Mysuru-ticket.pdf<small>182 KB</small></div>
+                <div class="pb out">Got it 👍<i>10:44 ✓✓</i></div>
+              </div>
+              <div class="ph-in"><span>Message</span><em></em></div>
+            </div></div>
+          </div>
+        </section>
 
-      <section class="land-sec" id="features">
-        <h2 class="land-h2">Privacy you can actually trust</h2>
-        <p class="land-lede">We designed BharatApp Chat so that protecting your privacy isn't a setting you switch on — it's how the app works by default.</p>
-        <div class="feat-grid">
-          <div class="feat">
-            <div class="feat-ic" style="background:rgba(6,186,112,.14)">🪪</div>
-            <h3>You, without the phone number</h3>
-            <p>Sign up with a simple @username. Share it freely — your personal number stays yours.</p>
-          </div>
-          <div class="feat">
-            <div class="feat-ic" style="background:rgba(89,201,141,.14)">🔒</div>
-            <h3>Encrypted end to end</h3>
-            <p>Every message is sealed on your device. Only you and the person you're talking to can read it.</p>
-          </div>
-          <div class="feat">
-            <div class="feat-ic" style="background:rgba(127,168,245,.14)">🤝</div>
-            <h3>You choose who connects</h3>
-            <p>People send a request first. Nobody messages you or sees your status until you accept.</p>
-          </div>
-          <div class="feat">
-            <div class="feat-ic" style="background:rgba(181,140,240,.14)">📮</div>
-            <h3>We keep nothing</h3>
-            <p>Our servers pass your messages along, then forget them. Your history lives with you, not us.</p>
-          </div>
-          <div class="feat">
-            <div class="feat-ic" style="background:rgba(228,87,63,.14)">🎙️</div>
-            <h3>Rich, private conversations</h3>
-            <p>Voice notes, photos, groups and 24-hour status — all with the same protection, all included free.</p>
-          </div>
-          <div class="feat">
-            <div class="feat-ic" style="background:rgba(95,201,201,.14)">💛</div>
-            <h3>Honest by design</h3>
-            <p>No ads. No selling your data. No tracking you around. Just a messenger that works for you.</p>
-          </div>
-        </div>
-      </section>
+        <section class="lp-sec lp-two" id="know">
+          <div><h2 class="lp-h2">What we know about you</h2><p class="lp-sub">Short list, on purpose.</p></div>
+          <table class="lp-table">
+            <tr><td>Your phone number</td><td><b>Never asked.</b> Sign-up uses a username.</td></tr>
+            <tr><td>Your messages</td><td><b>Can't read them.</b> Encrypted on your phone; removed from the server once delivered.</td></tr>
+            <tr><td>Your contacts list</td><td><b>Never uploaded.</b> People connect by request.</td></tr>
+            <tr><td>Your Gmail</td><td>Used to verify you. Never shown to anyone.</td></tr>
+            <tr><td>Ads and tracking</td><td><b>None.</b></td></tr>
+          </table>
+        </section>
 
-      <section class="land-sec alt" id="how">
-        <h2 class="land-h2">Simple to trust, simple to use</h2>
-        <div class="how-steps">
-          <div class="how-step"><span class="how-n">1</span><div><b>Pick your @username</b><p>No SIM and no phone number. Verify a Gmail once — it stays private, contacts only ever see your @username.</p></div></div>
-          <div class="how-step"><span class="how-n">2</span><div><b>Connect with people you trust</b><p>Share your username or QR. A quick request-and-accept keeps strangers out.</p></div></div>
-          <div class="how-step"><span class="how-n">3</span><div><b>Talk freely</b><p>Chats, voice notes, photos and status — protected end to end, always.</p></div></div>
-          <div class="how-step"><span class="how-n">4</span><div><b>Stay in control</b><p>Your chats stay on your phone. Back them up with a key only you hold.</p></div></div>
-        </div>
-      </section>
+        <section class="lp-sec lp-two" id="how">
+          <div><h2 class="lp-h2">Getting started takes a minute</h2></div>
+          <ol class="lp-steps">
+            <li><div><b>Pick a username</b><span>Something like @somu. That is what people use to find you.</span></div></li>
+            <li><div><b>Share it, or your QR code</b><span>They send a request; you accept. Strangers can't message you.</span></div></li>
+            <li><div><b>Chat, call, share</b><span>Text, voice notes, photos, files, groups and calls — on your phone and in the browser.</span></div></li>
+          </ol>
+        </section>
 
-      <section class="land-quote">
-        <div class="lq-mark">“</div>
-        <p class="lq-text">Privacy isn't about hiding. It's about being respected. BharatApp Chat is built to keep your trust — nothing more, nothing less.</p>
-      </section>
+        <section class="lp-sec">
+          <blockquote class="lp-quote">We started BharatApp Chat because sharing a phone number shouldn't be the price of sending a message.<cite>— The team at Kalisi Media, Bengaluru</cite></blockquote>
+        </section>
 
-      <section class="land-final">
-        <h2 class="land-h2">You're in good hands.</h2>
-        <p class="land-lede" style="margin-bottom:22px">Join the messenger that treats your privacy as it should be treated — as yours.</p>
-        <button class="btn hero-start" onclick="landStart()">Get started — free forever</button>
-        <p class="land-foot">BharatApp Chat by Kalisi Media Private Limited · Bengaluru, India 🇮🇳<br>End-to-end encrypted · No ads · No tracking<br><a href="/privacy.html">Privacy</a> · <a href="/terms.html">Terms</a> · <a href="/delete-account.html">Delete account</a> · <a href="mailto:support@bharatapp.chat">support@bharatapp.chat</a></p>
-      </section>
+        <footer class="lp-foot">
+          <b>BharatApp Chat</b><span>Kalisi Media Private Limited · Bengaluru</span>
+          <a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="/delete-account.html">Delete account</a><a href="mailto:support@bharatapp.chat">support@bharatapp.chat</a>
+        </footer>
+      </div>
     </div>
   </div>
 
@@ -418,7 +390,7 @@
 <script src="js/net.js?v=2.9"></script>
 <script src="js/pwkey.js?v=2.9"></script>
 <script src="js/voice.js?v=2.9"></script>
-<script src="js/landing.js?v=3.1"></script>
+<script src="js/landing.js?v=3.2"></script>
 <script src="js/secure.js?v=2.9"></script>
 <script src="js/dialog.js?v=2.9"></script>
 <script src="js/notify.js?v=2.9"></script>
