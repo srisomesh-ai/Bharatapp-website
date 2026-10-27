@@ -81,10 +81,10 @@ function flipToggle(id){
 
 async function changeUsernameUI(){
   const cur=me().username||'';
-  const nn=await kPrompt({title:'Change username',message:'3–20 letters, numbers or _. You can change this once every 30 days.',value:cur,placeholder:'username',okText:'Change'});
+  const nn=await kPrompt({title:'Change username',message:'4 or more letters and at least 1 number (letters, numbers, _). You can change this once every 30 days.',value:cur,placeholder:'username',okText:'Change'});
   if(!nn)return;
   const clean=nn.trim().replace(/^@/,'').toLowerCase();
-  if(!/^[a-z0-9_]{4,30}$/.test(clean)){ toast('At least 4 letters, numbers or _'); return; }
+  if(!/^[a-z0-9_]{5,30}$/.test(clean)||(clean.match(/[a-z]/g)||[]).length<4||!/[0-9]/.test(clean)){ toast('Use 4 or more letters and at least 1 number'); return; }
   if(clean===cur){ toast('That is already your username'); return; }
   if(!me().token){ toast('Only real accounts can change username'); return; }
   try{
@@ -94,7 +94,8 @@ async function changeUsernameUI(){
     openSettings(); renderAll();
   }catch(e){
     const msg={too_soon:'You changed it recently — try again in '+(e.days||'a few')+' days',
-      username_taken:'@'+clean+' is taken', bad_username:'Invalid username',
+      username_taken:'@'+clean+' is unavailable', bad_username:'Use 4 or more letters and at least 1 number',
+      premium_username:'Letters-only names are for BharatApp Premium — add a number',
       same_username:'That is already your username'}[e.message]||'Could not change username';
     toast(msg);
   }

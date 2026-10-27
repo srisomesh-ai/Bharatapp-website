@@ -100,17 +100,22 @@ function lpCheck(){
   const el=$('lp-user'); const v=el.value.replace(/^@+/,'').toLowerCase().replace(/[^a-z0-9_]/g,'');
   if(v!==el.value)el.value=v;
   _lpOk=''; clearTimeout(_lpTimer);
-  if(!v){ _lpStatus('At least 4 letters, numbers or _'); return; }
-  if(v.length<4){ _lpStatus('At least 4 characters'); return; }
+  if(!v){ _lpStatus('4 or more letters and at least 1 number, e.g. jenny21'); return; }
   _lpStatus('Checking @'+v+'…');
   const seq=++_lpSeq;
   _lpTimer=setTimeout(async()=>{
     try{
       const r=await api('check',{username:v});
       if(seq!==_lpSeq)return;
-      if(r.available){ _lpOk=v; _lpStatus('✓ @'+v+' is available','ok'); }
-      else if(r.reason==='too_short') _lpStatus('Usernames need at least 4 characters','bad');
-      else _lpStatus('@'+v+' is taken — try another','bad');
+      if(r.available){ _lpOk=v; _lpStatus('✓ @'+v+' is available','ok'); return; }
+      const why=r.reason==='taken'?'@'+v+' is unavailable':
+        r.reason==='premium'?'Letters-only names are for Premium':'Use 4+ letters and at least 1 number';
+      _lpStatus(why+((r.suggestions||[]).length?' — try ':''),'bad');
+      for(const u of r.suggestions||[]){
+        const b=document.createElement('button'); b.type='button'; b.className='lp-sugg'; b.textContent='@'+u;
+        b.onclick=()=>{ $('lp-user').value=u; lpCheck(); };
+        $('lp-status').appendChild(b);
+      }
     }catch(e){ if(seq===_lpSeq)_lpStatus('Could not check right now — try again'); }
   },350);
 }
@@ -152,7 +157,7 @@ async function lgLogin(){
   if(!pass){lgMsg('Enter your password');return;}
   const codeStep=!$('lg-step2').classList.contains('hide');
   if(codeStep && !/^\d{6}$/.test(code)){lgMsg('Enter the 6-digit code from your Gmail');return;}
-  const go=$('lg-go'); go.disabled=true; lgMsg('Checking…');
+  const go=$('lg-go'); go.disabled=true; lgMsg('Signing in…');
   try{
     if(!_lgKeys||_lgKeys.u!==u||_lgKeys.pass!==pass){
       // the server only gives out the password salt to a browser it trusts,
@@ -183,10 +188,11 @@ async function lgLogin(){
     const keys=_lgKeys.keys; _lgKeys=null;
     const ident=seedIdentity(r.name||u,{kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv},false);
     ident.device=true; save();
-    $('lg-pass').value=''; $('lg-code').value=''; $('lg-step2').classList.add('hide');
+    // go straight into the app; tidy the form only once it's out of sight
     lgMsg('');
-    await loadContactsAfterLogin();
     showApp();
+    $('lg-pass').value=''; $('lg-code').value=''; $('lg-step2').classList.add('hide');
+    loadContactsAfterLogin().then(()=>{ if(typeof renderAll==='function')renderAll(); });
   }catch(e){ lgMsg(LOGIN_ERR[e.message]||'Could not log in — check your internet'); }
   finally{ go.disabled=false; }
 }

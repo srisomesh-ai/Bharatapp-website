@@ -28,9 +28,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Newsreader:opsz,wght@6..72,500&family=Noto+Serif+Devanagari:wght@600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=3.3">
+<link rel="stylesheet" href="css/app.css?v=3.4">
 <link rel="stylesheet" href="css/landing-voice.css?v=3.0">
-<link rel="stylesheet" href="css/landing.css?v=10">
+<link rel="stylesheet" href="css/landing.css?v=11">
 <link rel="stylesheet" href="css/features.css?v=3.0">
 </head>
 <body>
@@ -57,10 +57,10 @@
             <h1 class="lp-h1">Pick a username.<br>That's your number now.</h1>
             <p class="lp-lead">BharatApp Chat works with a username you choose, not your phone number. Messages are encrypted on your phone and deleted from our server the moment they are delivered.</p>
             <form class="lp-claim" onsubmit="lpClaim();return false" autocomplete="off">
-              <label class="lp-field" for="lp-user"><span>@</span><input id="lp-user" maxlength="30" placeholder="yourname" autocapitalize="none" spellcheck="false" oninput="lpCheck()" aria-describedby="lp-status"></label>
+              <label class="lp-field" for="lp-user"><span>@</span><input id="lp-user" maxlength="30" placeholder="lakshmi7" autocapitalize="none" spellcheck="false" oninput="lpCheck()" aria-describedby="lp-status"></label>
               <button class="lp-btn" type="submit">Claim it</button>
             </form>
-            <div class="lp-status" id="lp-status">At least 4 letters, numbers or _</div>
+            <div class="lp-status" id="lp-status">4 or more letters and at least 1 number, e.g. jenny21</div>
             <div class="lp-alt">
               <a class="lp-tl" href="https://play.google.com/store/apps/details?id=com.messenger.app">Get the Android app →</a>
               <span>Free · No ads · Already have an account? <button class="lp-inline" onclick="landRestore()">Log in</button></span>
@@ -97,7 +97,7 @@
         <section class="lp-sec lp-two" id="how">
           <div><h2 class="lp-h2">Getting started takes a minute</h2></div>
           <ol class="lp-steps">
-            <li><div><b>Pick a username</b><span>Something like @somu. That is what people use to find you.</span></div></li>
+            <li><div><b>Pick a username</b><span>Something like @lakshmi7 or @jenny21. That is what people use to find you.</span></div></li>
             <li><div><b>Share it, or your QR code</b><span>They send a request; you accept. Strangers can't message you.</span></div></li>
             <li><div><b>Chat, call, share</b><span>Text, voice notes, photos, files, groups and calls — on your phone and in the browser.</span></div></li>
           </ol>
@@ -132,31 +132,43 @@
           <li><span class="dot"></span><span><b>Encrypted end to end.</b> Only you and your contact can read your chats.</span></li>
           <li><span class="dot"></span><span><b>You stay in control.</b> Your chats live on your phone, backed up only by you.</span></li>
         </ul>
-        <div class="field">
-          <label for="ob-name">Your display name</label>
-          <input id="ob-name" maxlength="24" placeholder="e.g. Somu" autocomplete="off">
-        </div>
-        <div class="field" style="margin-top:12px">
-          <label for="ob-user">Choose your @username</label>
-          <input id="ob-user" maxlength="30" placeholder="e.g. somu" autocomplete="off" autocapitalize="none" style="font-family:var(--mono)">
-        </div>
-        <div class="field" style="margin-top:12px">
-          <label for="ob-email">Your Gmail (kept private)</label>
-          <div style="display:flex;gap:8px">
-            <input id="ob-email" type="email" maxlength="80" placeholder="you@gmail.com" autocomplete="email" autocapitalize="none">
-            <button class="btn ghost" id="ob-send-code" style="width:auto;flex:none;margin:0;padding:0 14px" onclick="obSendCode()">Send code</button>
+        <!-- step A: who you are -->
+        <div id="ob-a">
+          <div class="field">
+            <label for="ob-name">Your name</label>
+            <input id="ob-name" maxlength="24" placeholder="e.g. Lakshmi" autocomplete="name">
           </div>
-          <p class="ob-why">Only to keep out fake accounts and to let you log in on a new device. Nobody sees it, and it's never linked to your @username.</p>
+          <div class="field" style="margin-top:12px">
+            <label for="ob-user">Choose your @username</label>
+            <input id="ob-user" maxlength="30" placeholder="e.g. lakshmi7" autocomplete="off" autocapitalize="none" spellcheck="false" style="font-family:var(--mono)" oninput="obCheckUser()">
+            <p class="ob-why" id="ob-user-status">4 or more letters and at least 1 number, e.g. sri_in7 or jenny21</p>
+            <div class="ob-sugg" id="ob-sugg"></div>
+          </div>
+          <div class="field" style="margin-top:12px">
+            <label for="ob-email">Your Gmail (kept private)</label>
+            <input id="ob-email" type="email" maxlength="80" placeholder="you@gmail.com" autocomplete="email" autocapitalize="none">
+            <p class="ob-why">Only to keep out fake accounts and to let you log in on a new device. Nobody sees it, and it's never linked to your @username.</p>
+          </div>
+          <button class="btn hero-start" id="ob-create" style="margin-top:16px" onclick="obStart()">Create my BharatApp Chat ID</button>
         </div>
-        <div class="field hide" id="ob-code-field" style="margin-top:12px">
-          <label for="ob-code">6-digit code from your email</label>
-          <input id="ob-code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code" style="font-family:var(--mono);letter-spacing:.3em">
+        <!-- step B: prove the Gmail, set a password -->
+        <div id="ob-b" class="hide">
+          <div class="lg-newdev" id="ob-sent">We sent a 6-digit code to your Gmail.</div>
+          <div class="field">
+            <label for="ob-code">Code from your Gmail</label>
+            <input id="ob-code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code" style="font-family:var(--mono);letter-spacing:.3em">
+          </div>
+          <div class="field" style="margin-top:12px">
+            <label for="ob-pass">Password</label>
+            <input id="ob-pass" type="password" maxlength="100" placeholder="8+ characters, letters and numbers" autocomplete="new-password">
+          </div>
+          <div class="field" style="margin-top:12px">
+            <label for="ob-pass2">Confirm password</label>
+            <input id="ob-pass2" type="password" maxlength="100" placeholder="Type it again" autocomplete="new-password">
+          </div>
+          <button class="btn hero-start" id="ob-finish" style="margin-top:16px" onclick="obCreate()">Verify and create account</button>
+          <button class="btn ghost" style="margin-top:8px" onclick="obBack()">Back</button>
         </div>
-        <div class="field" style="margin-top:12px">
-          <label for="ob-pass">Password (at least 8 characters)</label>
-          <input id="ob-pass" type="password" maxlength="100" placeholder="Password" autocomplete="new-password">
-        </div>
-        <button class="btn" style="margin-top:14px" onclick="obCreate()">Create my BharatApp Chat ID</button>
         <p class="ob-note">No SIM, no phone number. Your Gmail is only for sign-up — contacts never see it.</p>
         <button class="btn ghost" style="margin-top:10px" onclick="showLogin()">I already have an account — log in</button>
       </div>
@@ -390,18 +402,18 @@
 
 
 <script src="js/qrcode.js?v=2.9"></script>
-<script src="js/net.js?v=3.0"></script>
+<script src="js/net.js?v=3.4"></script>
 <script src="js/pwkey.js?v=2.9"></script>
 <script src="js/voice.js?v=2.9"></script>
-<script src="js/landing.js?v=3.3"></script>
+<script src="js/landing.js?v=3.4"></script>
 <script src="js/secure.js?v=2.9"></script>
 <script src="js/dialog.js?v=2.9"></script>
 <script src="js/notify.js?v=2.9"></script>
 <script src="js/requests.js?v=2.9"></script>
-<script src="js/settings.js?v=2.9"></script>
+<script src="js/settings.js?v=3.4"></script>
 <script src="js/block.js?v=2.9"></script>
 <script src="js/status.js?v=2.9"></script>
 <script src="js/groups.js?v=2.9"></script>
-<script src="js/app.js?v=2.9.1"></script>
+<script src="js/app.js?v=3.4"></script>
 </body>
 </html>

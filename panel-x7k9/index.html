@@ -38,6 +38,10 @@ input:focus{outline:none;border-color:var(--gold)}
 .stat .n{font-family:var(--disp);font-weight:800;font-size:28px}
 .stat .l{color:var(--muted);font-size:12.5px;margin-top:2px}
 .toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.newuser{border:1px solid rgba(128,128,128,.25);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+.newuser summary{cursor:pointer;font-weight:700}
+.nu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:10px 0}
+#nu-out{margin-top:8px}
 .toolbar input{flex:1;min-width:200px}
 .tabs{display:flex;gap:8px;margin-bottom:16px}
 .tabb{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 15px;color:var(--muted);font-weight:600;font-size:14px}
@@ -97,6 +101,18 @@ tr:last-child td{border-bottom:none}
     </div>
 
     <div id="view-users">
+      <details class="newuser">
+        <summary>+ Create a user</summary>
+        <p class="muted">Makes a ready-to-use account. Leave Gmail empty for an account that signs in with username + password only (no email code) — use this for the Google Play review account.</p>
+        <div class="nu-grid">
+          <input id="nu-name" placeholder="Display name" maxlength="24">
+          <input id="nu-user" placeholder="@username (any, 3–30)" maxlength="30" autocapitalize="none">
+          <input id="nu-email" placeholder="Gmail (optional)" maxlength="80" autocapitalize="none">
+          <input id="nu-pass" placeholder="Password (8+)" maxlength="100">
+        </div>
+        <button class="btn" id="nu-go" onclick="createUser()">Create user</button>
+        <div id="nu-out" class="muted"></div>
+      </details>
       <div class="toolbar">
         <input type="search" id="search" placeholder="Search @username, name, KAL-ID or email…" oninput="renderUsers()">
       </div>
@@ -123,6 +139,7 @@ tr:last-child td{border-bottom:none}
 </div>
 <div id="toast"></div>
 
+<script src="../js/pwkey.js"></script>
 <script>
 const API='api.php';
 let TOKEN=sessionStorage.getItem('kalisi_admin_token')||'';
@@ -210,6 +227,25 @@ async function delUser(kid,label){
   try{ await call('delete_user',{kal_id:kid});
     USERS=USERS.filter(x=>x.kal_id!==kid); renderUsers(); toast('User deleted'); loadStatsOnly();
   }catch(e){ toast(e.message); }
+}
+async function createUser(){
+  const name=$('nu-name').value.trim(), username=$('nu-user').value.trim().replace(/^@/,'').toLowerCase();
+  const email=$('nu-email').value.trim(), pass=$('nu-pass').value;
+  if(!name||!username||pass.length<8){ toast('Name, username and an 8+ character password are needed'); return; }
+  const b=$('nu-go'); b.disabled=true; $('nu-out').textContent='Creating…';
+  try{
+    // the account key comes from username + password, exactly as at sign-up
+    const salt=newSalt();
+    const keys=await keyFromPassword(username,pass,salt);
+    const verifier=await verifierFor(username,pass,salt);
+    const r=await call('create_user',{name,username,email,pubkey:keys.pub,verifier,salt});
+    $('nu-out').innerHTML='✓ Created <b>@'+esc(r.username)+'</b> ('+esc(r.kal_id)+'). They can sign in now with this username and password.';
+    for(const id of ['nu-name','nu-user','nu-email','nu-pass'])$(id).value='';
+    loadAll();
+  }catch(e){
+    $('nu-out').textContent={username_taken:'That @username is taken',email_in_use:'That Gmail already has an account',
+      bad_email:'Use a Gmail address (or leave it empty)',bad_username:'Username: 3–30 letters, numbers or _'}[e.message]||('Failed: '+e.message);
+  }finally{ b.disabled=false; }
 }
 async function loadStatsOnly(){ try{ const s=await call('stats',{}); const st=s.stats;
   $('stats').innerHTML=[['Total users',st.users],['Active (7d)',st.active7d],['Disabled',st.disabled],['Queued msgs',st.queued],['Groups',st.groups]]

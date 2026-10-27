@@ -81,7 +81,7 @@ function register(PDO $pdo, array $in): void {
   $pubkey = $in['pubkey'] ?? null; // JWK (public only)
   if ($name === '' || mb_strlen($name) > 24 || !is_array($pubkey)) out(false, ['error' => 'bad_input']);
   // new usernames: 4–30 characters (3-letter names are held back for now)
-  if (!preg_match('/^[a-z0-9_]{4,30}$/', $username)) out(false, ['error' => 'bad_username']);
+  if (($why = usernameProblem($username)) !== '') out(false, ['error' => $why]);
   // Every new account is tied to a verified Gmail address. It is kept on the
   // server only — lookups, profiles and contacts never return it. A persona
   // made from an account that is already signed in takes that account's email.
@@ -117,10 +117,13 @@ function register(PDO $pdo, array $in): void {
         $st->execute([$kid, $username, $name, json_encode($pubkey), $token, $email]);
       }
       // the code has done its job — it can't be used for a second account
+      $extra = [];
       if ($email !== null && !empty($in['email_code'])) {
         $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$email]);
+        // this device just proved the Gmail: trust it for password-only sign-in
+        $extra['trust'] = issueTrust($pdo, $kid);
       }
-      out(true, ['kal_id' => $kid, 'username' => $username, 'token' => $token]);
+      out(true, ['kal_id' => $kid, 'username' => $username, 'token' => $token] + $extra);
     } catch (PDOException $e) { /* duplicate id, retry */ }
   }
   out(false, ['error' => 'id_gen_failed']);
@@ -327,6 +330,17 @@ function recoverSalt(PDO $pdo, array $in): void {
   $st->execute([$email]);
   if (!$st->fetchColumn()) issueCode($pdo, $email);
   out(true, ['need_code' => true, 'email_hint' => emailHint($email)]);
+}
+
+/** A new "trusted device" key for an account (kept by the browser). */
+function issueTrust(PDO $pdo, string $kalId): string {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_trusted (
+    hash CHAR(64) PRIMARY KEY, kal_id VARCHAR(20) NOT NULL, created_at DATETIME NOT NULL,
+    last_used DATETIME NOT NULL, INDEX (kal_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  $t = bin2hex(random_bytes(24));
+  $pdo->prepare('INSERT INTO k_trusted (hash, kal_id, created_at, last_used) VALUES (?,?,NOW(),NOW())')
+      ->execute([hash('sha256', $t), $kalId]);
+  return $t;
 }
 
 function emailHint(string $email): string {
@@ -540,12 +554,7 @@ function loginPassword(PDO $pdo, array $in): void {
   }
 
   $email = (string)($r['email'] ?? '');
-  $newTrust = function () use ($pdo, $r): string {
-    $t = bin2hex(random_bytes(24));
-    $pdo->prepare('INSERT INTO k_trusted (hash, kal_id, created_at, last_used) VALUES (?,?,NOW(),NOW())')
-        ->execute([hash('sha256', $t), $r['kal_id']]);
-    return $t;
-  };
+  $newTrust = fn(): string => issueTrust($pdo, $r['kal_id']);
   if ($email === '') {
     // older account without a Gmail: the password alone has to do
     out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')) + ['trust' => $newTrust()]);
@@ -741,7 +750,7 @@ function logForward(PDO $pdo, array $in, string $kalId): void {
 function changeUsername(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
   $new = strtolower(trim((string)($in['username'] ?? ''), " @"));
-  if (!preg_match('/^[a-z0-9_]{4,30}$/', $new)) out(false, ['error' => 'bad_username']);
+  if (($why = usernameProblem($new)) !== '') out(false, ['error' => $why]);
   // rate limit: once per 30 days
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN username_changed_at DATETIME NULL"); } catch (Throwable $e) {}
   $st = $pdo->prepare('SELECT username, username_changed_at FROM k_users WHERE kal_id = ?');
@@ -760,12 +769,49 @@ function changeUsername(PDO $pdo, array $in): void {
   out(true, ['username' => $new]);
 }
 
+/**
+ * Rules for a new free @username: 4+ letters and at least one number
+ * (letters, numbers, _ ; up to 30). Letters-only names are kept for the
+ * premium tier, numbers-only names aren't allowed. '' = fine.
+ */
+function usernameProblem(string $u): string {
+  if (!preg_match('/^[a-z0-9_]{4,30}$/', $u)) return 'bad_username';
+  $letters = preg_match_all('/[a-z]/', $u);
+  $digits = preg_match_all('/[0-9]/', $u);
+  if ($digits === 0 && $letters >= 4) return 'premium_username';
+  if ($letters < 4 || $digits === 0) return 'bad_username';
+  return '';
+}
+
+function usernameTaken(PDO $pdo, string $u): bool {
+  $st = $pdo->prepare('SELECT 1 FROM k_users WHERE username = ?'); $st->execute([$u]);
+  return (bool)$st->fetchColumn();
+}
+
+/** Three free names close to what was asked for: its letters + a number. */
+function usernameSuggestions(PDO $pdo, string $u): array {
+  $base = substr(preg_replace('/[^a-z]/', '', $u), 0, 20);
+  if ($base === '') $base = 'user';
+  elseif (strlen($base) < 4) $base .= '_in';   // sri → sri_in27
+  $out = [];
+  for ($i = 0; $i < 40 && count($out) < 3; $i++) {
+    $n = $i < 10 ? random_int(1, 99) : random_int(100, 9999);
+    $c = $base . $n;
+    if (!in_array($c, $out, true) && usernameProblem($c) === '' && !usernameTaken($pdo, $c)) $out[] = $c;
+  }
+  return $out;
+}
+
 function checkUsername(PDO $pdo, array $in): void {
   $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
-  if (strlen($u) === 3 && preg_match('/^[a-z0-9_]+$/', $u)) out(true, ['available' => false, 'reason' => 'too_short']);
-  if (!preg_match('/^[a-z0-9_]{4,30}$/', $u)) out(true, ['available' => false, 'reason' => 'invalid']);
-  $st = $pdo->prepare('SELECT 1 FROM k_users WHERE username = ?'); $st->execute([$u]);
-  out(true, ['available' => !$st->fetch()]);
+  if (!preg_match('/^[a-z0-9_]{1,30}$/', $u)) out(true, ['available' => false, 'reason' => 'invalid']);
+  $why = usernameProblem($u);
+  if ($why === 'premium_username') {
+    out(true, ['available' => false, 'reason' => 'premium', 'suggestions' => usernameSuggestions($pdo, $u)]);
+  }
+  if ($why !== '') out(true, ['available' => false, 'reason' => 'rules', 'suggestions' => usernameSuggestions($pdo, $u)]);
+  if (usernameTaken($pdo, $u)) out(true, ['available' => false, 'reason' => 'taken', 'suggestions' => usernameSuggestions($pdo, $u)]);
+  out(true, ['available' => true]);
 }
 
 function reqSend(PDO $pdo, array $in): void {
