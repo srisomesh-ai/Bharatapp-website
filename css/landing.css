@@ -10,7 +10,8 @@
 
 .lp-nav{display:flex;align-items:center;gap:28px;padding:calc(env(safe-area-inset-top) + 16px) 0 16px;border-bottom:1px solid var(--lp-rule)}
 .lp-brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:17px;text-decoration:none}
-.lp-brand img{width:28px;height:28px;border-radius:7px}
+.lp-brand img{height:36px;width:auto;display:block}
+@media (min-width:900px){.lp-brand img{height:42px}}
 .lp-links{display:none;gap:24px;margin-left:auto;font-size:14.5px;color:var(--lp-soft)}
 .lp-links a{text-decoration:none}
 .lp-links a:hover{color:var(--lp-ink)}
