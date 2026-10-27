@@ -1,0 +1,4 @@
+# Invite links from QR codes: kalisi.app/add/<username> → the page that
+# opens the app (or the Play Store, or connects in the browser)
+RewriteEngine On
+RewriteRule ^add/([A-Za-z0-9_]{3,20})/?$ /?add=$1 [R=302,L]

@@ -29,6 +29,7 @@ try {
     case 'login_otp_send':   loginOtpSend($pdo, $in); break;
     case 'login_otp_verify': loginOtpVerify($pdo, $in); break;
     case 'device_list':   deviceList($pdo, $in); break;
+    case 'account_delete': accountDelete($pdo, $in); break;
     case 'device_remove': deviceRemove($pdo, $in); break;
     case 'register':  register($pdo, $in); break;
     case 'lookup':    lookup($pdo, $in); break;
@@ -428,6 +429,48 @@ function loginOtpVerify(PDO $pdo, array $in): void {
     'salt'         => (string)($r['salt'] ?? ''),
     'has_password' => !empty($r['verifier']),
   ]);
+}
+
+/* Delete my account and everything the server holds for it. The user types
+   their @username to confirm. Fingerprints of messages they forwarded are
+   kept until they expire (FWD_RETENTION_DAYS) for lawful requests, without
+   the email or username. */
+function accountDelete(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $kid = $me['kal_id'];
+  $st = $pdo->prepare('SELECT username, email FROM k_users WHERE kal_id = ?');
+  $st->execute([$kid]); $u = $st->fetch();
+  if (strtolower(trim((string)($in['confirm'] ?? ''), " @")) !== (string)$u['username']) {
+    out(false, ['error' => 'confirm_mismatch']);
+  }
+  // their status files on disk
+  try {
+    $q = $pdo->prepare("SELECT payload FROM k_status WHERE kal_id = ? AND payload LIKE 'file:%'");
+    $q->execute([$kid]);
+    foreach ($q->fetchAll() as $r) {
+      $path = __DIR__ . '/media/status/' . basename((string)$r['payload']);
+      if (is_file($path)) @unlink($path);
+    }
+  } catch (Throwable $e) {}
+  $del = [
+    'DELETE FROM k_queue WHERE to_id = ? OR from_id = ?' => 2,
+    'DELETE FROM k_receipts WHERE to_id = ?' => 1,
+    'DELETE FROM k_status_views WHERE viewer = ? OR status_id IN (SELECT id FROM k_status WHERE kal_id = ?)' => 2,
+    'DELETE FROM k_status_reacts WHERE reactor = ? OR status_id IN (SELECT id FROM k_status WHERE kal_id = ?)' => 2,
+    'DELETE FROM k_status WHERE kal_id = ?' => 1,
+    'DELETE FROM k_contacts WHERE a = ? OR b = ?' => 2,
+    'DELETE FROM k_blocks WHERE blocker = ? OR blocked = ?' => 2,
+    'DELETE FROM k_devices WHERE kal_id = ?' => 1,
+    'DELETE FROM k_fcm WHERE kal_id = ?' => 1,
+  ];
+  foreach ($del as $sql => $n) {
+    try { $pdo->prepare($sql)->execute(array_fill(0, $n, $kid)); } catch (Throwable $e) {}
+  }
+  if (!empty($u['email'])) {
+    try { $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$u['email']]); } catch (Throwable $e) {}
+  }
+  $pdo->prepare('DELETE FROM k_users WHERE kal_id = ?')->execute([$kid]);
+  out(true, ['deleted' => true]);
 }
 
 function deviceList(PDO $pdo, array $in): void {
