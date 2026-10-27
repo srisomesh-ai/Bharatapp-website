@@ -93,6 +93,35 @@ function landStart(fromHistory){
 
 function landRestore(){ showLogin(); }
 
+/* ---- home page: check a @username live, then carry it into sign-up ---- */
+let _lpTimer=null, _lpSeq=0, _lpOk='';
+function _lpStatus(t,cls){ const e=$('lp-status'); e.textContent=t; e.className='lp-status'+(cls?' '+cls:''); }
+function lpCheck(){
+  const el=$('lp-user'); const v=el.value.replace(/^@+/,'').toLowerCase().replace(/[^a-z0-9_]/g,'');
+  if(v!==el.value)el.value=v;
+  _lpOk=''; clearTimeout(_lpTimer);
+  if(!v){ _lpStatus('3–20 letters, numbers or _'); return; }
+  if(v.length<3){ _lpStatus('At least 3 characters'); return; }
+  _lpStatus('Checking @'+v+'…');
+  const seq=++_lpSeq;
+  _lpTimer=setTimeout(async()=>{
+    try{
+      const r=await api('check',{username:v});
+      if(seq!==_lpSeq)return;
+      if(r.available){ _lpOk=v; _lpStatus('✓ @'+v+' is available','ok'); }
+      else _lpStatus('@'+v+' is taken — try another','bad');
+    }catch(e){ if(seq===_lpSeq)_lpStatus('Could not check right now — try again'); }
+  },350);
+}
+function lpClaim(){
+  const v=$('lp-user').value;
+  if(!v){ $('lp-user').focus(); _lpStatus('Type the username you want','bad'); return; }
+  if(_lpOk!==v){ lpCheck(); return; }
+  landStart();
+  const u=$('ob-user'); if(u){ u.value=v; u.dispatchEvent(new Event('input',{bubbles:true})); }
+  setTimeout(()=>$('ob-name')?.focus(),250);
+}
+
 /* ---- log in: @username + password. A new browser is asked once for a code
    sent to the account's Gmail; after that this browser is trusted. ---- */
 function showLogin(fromHistory){
