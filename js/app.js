@@ -93,6 +93,16 @@ async function obSendCode(){
   }
   setTimeout(()=>{b.disabled=false;},30000);
 }
+/* A guessable password would let someone rebuild the account key, so ask for
+   a reasonable one: 8+ characters, letters and numbers, not the username. */
+function passwordProblem(pass,username){
+  if(pass.length<8)return 'Password must be at least 8 characters';
+  if(!/[a-z]/i.test(pass)||!/[0-9]/.test(pass))return 'Use both letters and numbers in your password';
+  const low=pass.toLowerCase();
+  if(username&&low.includes(username))return "Your password can't contain your username";
+  if(/^(password|qwerty|abc|bharat|india|12345)/.test(low))return 'That password is too easy to guess';
+  return '';
+}
 async function obCreate(){
   const n=$('ob-name').value.trim();
   if(!n){toast('Enter a name first');return;}
@@ -102,7 +112,7 @@ async function obCreate(){
   if(!email){toast('Enter your Gmail and tap Send code');return;}
   if(!/^\d{6}$/.test(code)){toast('Enter the 6-digit code from your email');return;}
   const pass=$('ob-pass').value||'';
-  if(pass.length<8){toast('Password must be at least 8 characters');return;}
+  const pwBad=passwordProblem(pass,un); if(pwBad){toast(pwBad);return;}
   toast('Creating @'+un+'…');
   let reg=null;
   try{
@@ -115,7 +125,7 @@ async function obCreate(){
     reg={kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv};
   }catch(e){
     if(e.message==='username_taken'){toast('@'+un+' is taken — try another');return;}
-    if(e.message==='bad_username'){toast('Username: 3–20 letters, numbers or _');return;}
+    if(e.message==='bad_username'){toast('Username: at least 4 letters, numbers or _');return;}
     const emailErr={bad_email:'Enter a valid Gmail address',email_required:'Verify your Gmail first',
       wrong_code:'Wrong code — check your email',code_expired:'Code expired — tap Send code again',
       too_many:'Too many tries — ask for a new code',email_limit:'This Gmail already has an account',email_in_use:'This Gmail already has an account — log in instead'}[e.message];

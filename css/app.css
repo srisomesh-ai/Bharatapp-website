@@ -228,3 +228,5 @@ input,textarea,select{font-family:inherit;font-size:16px;color:var(--text)}
 #toast{position:absolute;left:50%;bottom:92px;transform:translate(-50%,14px);background:#1E2540;border:1px solid rgba(255,255,255,.12);color:#EDEEF4;font-size:13.5px;font-weight:600;padding:11px 17px;border-radius:12px;opacity:0;transition:.22s;z-index:70;pointer-events:none;max-width:86%;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.28)}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.ob-why{font-size:12.5px;line-height:1.45;color:#8A91AB;margin:7px 2px 0}
