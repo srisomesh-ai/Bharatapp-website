@@ -61,8 +61,9 @@ function openSettings(){
       <div class="menu-it" onclick="backupData()">🔐 &nbsp;Save encrypted backup</div>
       <div class="menu-it" onclick="restorePick()">📥 &nbsp;Restore from backup</div>
       <div class="menu-it red" onclick="logout()">🚪 &nbsp;Log out from this phone</div>
+      ${me()?.token?'<div class="menu-it red" onclick="deleteAccount()">🗑 &nbsp;Delete account</div>':''}
     </div>
-    <p class="qr-sub" style="text-align:center;margin:10px 0 4px">Kalisi ${APP_VERSION} · kalisi.app</p>`;
+    <p class="qr-sub" style="text-align:center;margin:10px 0 4px">Kalisi ${APP_VERSION} · Kalisi App by Kalisi Media Private Limited<br><a href="/privacy.html" target="_blank">Privacy</a> · <a href="/terms.html" target="_blank">Terms</a></p>`;
   renderBlockedList();
   openSheet('sheet-settings');
 }
@@ -102,4 +103,15 @@ function setPref(key,val){ S.set=S.set||{}; S.set[key]=val; save(); toast('Saved
 async function editName(){
   const n=await kPrompt({title:'Display name',value:me().name,placeholder:'Your name',okText:'Save'});
   if(n&&n.trim()){ me().name=n.trim(); save(); openSettings(); renderAll(); }
+}
+
+/* Delete the account on the server for good (Play Store requirement). */
+async function deleteAccount(){
+  const m=me(); if(!m?.token)return;
+  const typed=await kPrompt({title:'Delete your account?',message:'Your @username, Gmail, profile, contacts and statuses are removed from Kalisi and you are logged out everywhere. This cannot be undone. Type @'+m.username+' to confirm.',placeholder:m.username,okText:'Delete',danger:true});
+  if(typed==null)return;
+  try{ await api('account_delete',{...authBody(),confirm:typed}); }
+  catch(e){ toast(e.message==='confirm_mismatch'?'Type @'+m.username+' exactly to confirm':'Could not delete the account'); return; }
+  try{ localStorage.removeItem(LS_KEY); }catch(e){}
+  toast('Your account was deleted'); setTimeout(()=>location.replace('/'),900);
 }

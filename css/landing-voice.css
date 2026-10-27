@@ -73,6 +73,7 @@
 .land-final{padding:20px 22px calc(env(safe-area-inset-bottom) + 44px);text-align:center}
 .land-final .hero-start{max-width:330px;margin:0 auto}
 .land-foot{color:var(--faint);font-size:12px;line-height:1.7;margin-top:26px}
+.land-foot a{color:inherit;text-decoration:underline}
 
 /* ============ Voice messages ============ */
 .voice-bub{display:flex;align-items:center;gap:10px;min-width:180px}
