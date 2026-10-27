@@ -36,6 +36,9 @@ try {
     case 'set_disabled': setDisabled($pdo, $in); break;
     case 'delete_user':  deleteUser($pdo, $in); break;
     case 'create_user':  createUser($pdo, $in); break;
+    case 'slides':       adminSlides(); break;
+    case 'slide_add':    slideAdd($in); break;
+    case 'slide_del':    slideDel($in); break;
     case 'list_groups':  listGroups($pdo); break;
     case 'trace':        traceForward($pdo, $in); break;
     case 'wipe_all':     wipeAll($pdo); break;
@@ -155,6 +158,34 @@ function createUser(PDO $pdo, array $in): void {
     } catch (PDOException $e) { /* id clash, try another */ }
   }
   out(false, ['error' => 'id_gen_failed']);
+}
+
+/* ---- home page demo phone screenshots (api/media/slides) ---- */
+function slideDir(): string {
+  $d = __DIR__ . '/../api/media/slides';
+  if (!is_dir($d)) @mkdir($d, 0755, true);
+  return $d;
+}
+function adminSlides(): void {
+  $files = glob(slideDir() . '/*.{png,jpg,jpeg,webp}', GLOB_BRACE) ?: [];
+  sort($files);
+  out(true, ['slides' => array_map(fn($f) => ['name' => basename($f), 'url' => '/api/media/slides/' . basename($f) . '?v=' . filemtime($f)], $files)]);
+}
+function slideAdd(array $in): void {
+  // data URL from the panel; images only, up to 2 MB
+  if (!preg_match('#^data:image/(png|jpeg|webp);base64,(.+)$#', (string)($in['data'] ?? ''), $m)) out(false, ['error' => 'bad_image']);
+  $bytes = base64_decode($m[2], true);
+  if ($bytes === false || strlen($bytes) > 2 * 1024 * 1024 || @getimagesizefromstring($bytes) === false) out(false, ['error' => 'bad_image']);
+  $ext = $m[1] === 'jpeg' ? 'jpg' : $m[1];
+  $name = date('YmdHis') . '-' . bin2hex(random_bytes(3)) . '.' . $ext;
+  file_put_contents(slideDir() . '/' . $name, $bytes);
+  out(true, ['name' => $name]);
+}
+function slideDel(array $in): void {
+  $name = basename((string)($in['name'] ?? ''));
+  if (!preg_match('/^[0-9]{14}-[a-f0-9]{6}\.(png|jpg|webp)$/', $name)) out(false, ['error' => 'bad_name']);
+  @unlink(slideDir() . '/' . $name);
+  out(true, ['deleted' => $name]);
 }
 
 function deleteUser(PDO $pdo, array $in): void {
