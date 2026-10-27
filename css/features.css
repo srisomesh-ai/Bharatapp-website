@@ -60,7 +60,7 @@
   --mine:#D6E4FF; --theirs:#FFFFFF; --gold:#029573; --gold-deep:#B8720F;
 }
 :root[data-theme=light] body{background:#DCE0EC}
-:root[data-theme=light] #phone{background:var(--bg);box-shadow:0 0 60px rgba(0,0,0,.12)}
+:root[data-theme=light] #phone{background:var(--bg)}
 :root[data-theme=light] .top{background:var(--bg)}
 :root[data-theme=light] .tabs{background:var(--panel);border-top-color:var(--line)}
 :root[data-theme=light] #chat-top{background:var(--panel);border-bottom-color:var(--line)}
