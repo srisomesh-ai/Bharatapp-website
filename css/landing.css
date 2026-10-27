@@ -104,7 +104,7 @@
 .hero-start{background:linear-gradient(135deg,#06BA70,#029573);color:#fff;font-weight:800;box-shadow:0 12px 34px -10px rgba(6,186,112,.55);border:none;font-size:16px}
 .hero-start:active{transform:scale(.98)}
 .lp-bharat{padding:44px 0 48px}
-.lp-quote-hero{margin-top:30px;padding-top:24px;border-top:1px solid var(--lp-rule);font-size:21px}
-.lp-quote-hero .lp-hi{font-size:26px}
+.lp-quote-hero{margin:0 0 18px;padding:2px 0 2px 16px;border-left:3px solid var(--lp-green);font-size:19px}
+.lp-quote-hero .lp-hi{font-size:24px;line-height:1.35}
 .lp-quote-hero .lp-body{font-size:15px;margin-top:10px}
-@media (min-width:900px){.lp-quote-hero{font-size:22px}.lp-quote-hero .lp-hi{font-size:30px}}
+@media (min-width:900px){.lp-quote-hero{font-size:21px}.lp-quote-hero .lp-hi{font-size:28px}}
