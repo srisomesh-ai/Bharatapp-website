@@ -46,12 +46,12 @@ function botReply(c){
 }
 
 /* ---------- first run ---------- */
-function seedIdentity(name,reg){
+function seedIdentity(name,reg,withDemos=true){
   const id=uid();
   const ident={id,name,kalId:reg?reg.kalId:kalId(),color:COLORS[0],created:now()};
   if(reg){ident.username=reg.username;ident.token=reg.token;ident.pub=reg.pub;ident.priv=reg.priv;}
   S={v:1,identities:[ident],active:id,data:{}};
-  S.data[id]=freshData(true);
+  S.data[id]=freshData(withDemos);
   save();
   return ident;
 }
@@ -101,11 +101,17 @@ async function obCreate(){
   const email=($('ob-email').value||'').trim(), code=($('ob-code').value||'').trim();
   if(!email){toast('Enter your Gmail and tap Send code');return;}
   if(!/^\d{6}$/.test(code)){toast('Enter the 6-digit code from your email');return;}
+  const pass=$('ob-pass').value||'';
+  if(pass.length<8){toast('Password must be at least 8 characters');return;}
   toast('Creating @'+un+'…');
   let reg=null;
   try{
-    const keys=await genKeys();
-    const r=await api('register',{name:n,username:un,pubkey:keys.pub,email,email_code:code});
+    // the key comes from the password, exactly as in the Android app, so the
+    // same account opens on the phone and in any browser
+    const salt=newSalt();
+    const keys=await keyFromPassword(un,pass,salt);
+    const verifier=await verifierFor(un,pass,salt);
+    const r=await api('register',{name:n,username:un,pubkey:keys.pub,email,email_code:code,salt,verifier});
     reg={kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv};
   }catch(e){
     if(e.message==='username_taken'){toast('@'+un+' is taken — try another');return;}

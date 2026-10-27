@@ -80,7 +80,7 @@ async function connectReal(handle){
 async function netSend(c,m){
   const body={kind:m.kind,text:m.text,img:m.img||null,audio:m.audio||null,wave:m.wave||null,dur:m.dur||0,burn:!!m.burn,replyTo:m.replyTo||null,cid:m.id,ts:m.ts,timer:chat(c.id).timer||0};
   const enc=await encryptFor(c,body);
-  await api('send',{...authBody(),to:c.kalId,client_id:m.id,...enc});
+  await api('send',{...authBody(),to:c.kalId,client_id:m.id,...enc,echo:1});
 }
 async function netSendCtl(c,obj){ // control messages: read receipts, burn acks — also encrypted
   const enc=await encryptFor(c,obj);
@@ -140,6 +140,8 @@ async function pollOnce(){
       if(m){ if(m.status==='sent')m.status='delivered'; m.receipt=r.receipt.slice(0,16); changed=true; } }
   }
   for(const pkt of res.messages){
+    // something I sent from my phone / another browser — show it here too
+    if(pkt.to){ if(await handleMyEcho(pkt))changed=true; continue; }
     // group message? (relayed blob, base64 JSON with gid)
     if(pkt.iv==='grp'){
       try{
@@ -199,6 +201,23 @@ async function pollOnce(){
   if(typeof autoBackup==='function')autoBackup();  // throttled to once/30min, app only
   // refresh chat-header presence (online/last seen) while a chat is open
   if(curChat && typeof fetchPresence==='function'){ const cc=contact(curChat); if(cc && cc.real && !cc.isGroup)fetchPresence(cc); }
+}
+
+/* ---- a message I sent from another of my devices ---- */
+async function handleMyEcho(pkt){
+  if(pkt.from!==me().kalId||!/^KAL-/.test(pkt.to))return false;   // app groups use their own scheme
+  let c=D().contacts.find(x=>x.kalId===pkt.to);
+  if(!c){ try{ c=await connectReal(pkt.to); }catch(e){ return false; } }
+  // same shared key both ways: my key + their public key
+  let body; try{ body=await decryptFrom(c,pkt.iv,pkt.blob); }catch(e){ return false; }
+  if(!['text','img','voice'].includes(body.kind))return false;
+  const ch=chat(c.id);
+  if(ch.msgs.some(x=>x.id===body.cid))return false;
+  ch.msgs.push({id:body.cid||uid(),from:'me',kind:body.kind,text:body.text||'',img:body.img||null,
+    audio:body.audio||null,wave:body.wave||null,dur:body.dur||0,ts:body.ts||pkt.ts,status:'sent',
+    burn:!!body.burn,replyTo:body.replyTo||null});
+  ch.msgs.sort((a,b)=>a.ts-b.ts);
+  return true;
 }
 
 /* ---- incoming group message ---- */
