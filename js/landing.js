@@ -186,7 +186,7 @@ async function lgLogin(){
     }
     if(r.trust)_setTrust(u,r.trust);
     const keys=_lgKeys.keys; _lgKeys=null;
-    const ident=seedIdentity(r.name||u,{kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv},false);
+    const ident=seedIdentity(r.name||u,{kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv});
     ident.device=true; save();
     // go straight into the app; tidy the form only once it's out of sight
     lgMsg('');
