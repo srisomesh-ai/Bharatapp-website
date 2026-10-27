@@ -2,6 +2,9 @@
 /* Copy this file to config.local.php on the SERVER (File Manager) and fill in.
    Never commit config.local.php to Git. */
 define('DB_PASS', 'your_database_password_here');
+/* Only if this site uses a different database than the defaults: */
+// define('DB_NAME', 'u943205660_xxxxx');
+// define('DB_USER', 'u943205660_xxxxx');
 
 /* Admin panel credentials (optional overrides).
    Default user is 'someswara', default password 'Kalisi@Admin2026' — CHANGE the password.
