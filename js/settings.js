@@ -84,7 +84,7 @@ async function changeUsernameUI(){
   const nn=await kPrompt({title:'Change username',message:'3–20 letters, numbers or _. You can change this once every 30 days.',value:cur,placeholder:'username',okText:'Change'});
   if(!nn)return;
   const clean=nn.trim().replace(/^@/,'').toLowerCase();
-  if(!/^[a-z0-9_]{3,20}$/.test(clean)){ toast('3–20 letters, numbers or _'); return; }
+  if(!/^[a-z0-9_]{4,30}$/.test(clean)){ toast('At least 4 letters, numbers or _'); return; }
   if(clean===cur){ toast('That is already your username'); return; }
   if(!me().token){ toast('Only real accounts can change username'); return; }
   try{

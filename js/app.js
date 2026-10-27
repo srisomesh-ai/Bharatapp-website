@@ -97,7 +97,7 @@ async function obCreate(){
   const n=$('ob-name').value.trim();
   if(!n){toast('Enter a name first');return;}
   const un=($('ob-user').value||'').trim().replace(/^@/,'').toLowerCase();
-  if(!/^[a-z0-9_]{3,20}$/.test(un)){toast('Username: 3–20 letters, numbers or _');return;}
+  if(!/^[a-z0-9_]{4,30}$/.test(un)){toast('Username: at least 4 letters, numbers or _');return;}
   const email=($('ob-email').value||'').trim(), code=($('ob-code').value||'').trim();
   if(!email){toast('Enter your Gmail and tap Send code');return;}
   if(!/^\d{6}$/.test(code)){toast('Enter the 6-digit code from your email');return;}
@@ -118,7 +118,7 @@ async function obCreate(){
     if(e.message==='bad_username'){toast('Username: 3–20 letters, numbers or _');return;}
     const emailErr={bad_email:'Enter a valid Gmail address',email_required:'Verify your Gmail first',
       wrong_code:'Wrong code — check your email',code_expired:'Code expired — tap Send code again',
-      too_many:'Too many tries — ask for a new code',email_limit:'This Gmail already has 5 accounts'}[e.message];
+      too_many:'Too many tries — ask for a new code',email_limit:'This Gmail already has an account',email_in_use:'This Gmail already has an account — log in instead'}[e.message];
     if(emailErr){toast(emailErr);return;}
     const demo=await kConfirm({title:'Server unreachable',message:'A real account cannot be created right now. Continue in offline demo mode? (demo bots only — no real chatting, no @username reserved)',okText:'Demo mode',cancelText:'Cancel'});
     if(!demo)return;
