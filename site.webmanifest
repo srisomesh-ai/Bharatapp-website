@@ -1,11 +1,11 @@
 {
-  "name": "Kalisi — Private messenger",
-  "short_name": "Kalisi",
+  "name": "BharatApp — Private messenger",
+  "short_name": "BharatApp",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ],
-  "theme_color": "#0E5C5C",
+  "theme_color": "#013123",
   "background_color": "#0D1120",
   "display": "standalone",
   "start_url": "/"

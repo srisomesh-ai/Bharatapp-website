@@ -9,7 +9,7 @@
  */
 header('Content-Type: text/plain; charset=utf-8');
 
-echo "KALISI PUSH CHECK\n";
+echo "BHARATAPP PUSH CHECK\n";
 echo "=================\n\n";
 
 // 1. the service account file
@@ -152,7 +152,7 @@ $url = 'https://fcm.googleapis.com/v1/projects/' . $project . '/messages:send';
 foreach ($rows as $i => $r) {
     $msg = ['message' => [
         'token' => $r['token'],
-        'notification' => ['title' => 'Kalisi', 'body' => 'Test notification'],
+        'notification' => ['title' => 'BharatApp', 'body' => 'Test notification'],
         'android' => [
             'priority' => 'high',
             'notification' => ['sound' => 'default', 'channel_id' => 'kalisi_messages_v2'],

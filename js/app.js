@@ -1,4 +1,4 @@
-/* ============ Kalisi prototype — all data stays in this browser ============ */
+/* ============ BharatApp prototype — all data stays in this browser ============ */
 'use strict';
 const APP_VERSION='v0.5';
 function applyTheme(t){
@@ -7,7 +7,7 @@ function applyTheme(t){
   S=S||{}; S.set=S.set||{}; S.set.theme=t; if(localStorage.getItem(LS_KEY))save();
 }
 const LS_KEY='kalisi_v1';
-const COLORS=['#F5A83C','#7FA8F5','#59C98D','#E4739A','#B58CF0','#5FC9C9','#E4A05F'];
+const COLORS=['#06BA70','#7FA8F5','#59C98D','#E4739A','#B58CF0','#5FC9C9','#E4A05F'];
 let S=null;                 // app state
 let curChat=null;           // open contact id
 let replyTo=null;
@@ -36,8 +36,8 @@ function avatarHTML(o,cls){return `<div class="avatar ${cls||''}" style="backgro
 
 /* ---------- bot brains ---------- */
 const BOT_LINES={
- ravi:["Cheppu bro, whats the plan? 😄","Ha ok ok, correct point.","Kalisi lo unnam kabatti freega matladachu 😎","Sare, evening call cheddam.","👍👍","Nenu kuda adhe anukunna!","Send me the location once ready.","Deal cheseddam, no problem."],
- priya:["Got it! Will check and tell you.","Nice! Kalisi feels so smooth 😍","Ok done ✅","Hmm let me think about it.","Perfect, thank you!","Sending you the details in a bit.","Haha true! 😂","That burn message feature is crazy 🔥"],
+ ravi:["Cheppu bro, whats the plan? 😄","Ha ok ok, correct point.","BharatApp lo unnam kabatti freega matladachu 😎","Sare, evening call cheddam.","👍👍","Nenu kuda adhe anukunna!","Send me the location once ready.","Deal cheseddam, no problem."],
+ priya:["Got it! Will check and tell you.","Nice! BharatApp feels so smooth 😍","Ok done ✅","Hmm let me think about it.","Perfect, thank you!","Sending you the details in a bit.","Haha true! 😂","That burn message feature is crazy 🔥"],
  team:["Tip: tap 🔥 before sending to make a message burn after reading.","Your messages are relayed and instantly deleted from our server — long-press any delivered message to see its deletion receipt.","Try the Connect tab to see your QR code. Friends scan it in person — no numbers exchanged.","You can create a second persona from your avatar (top-left). Separate ID, separate chats."]
 };
 function botReply(c){
@@ -58,20 +58,20 @@ function seedIdentity(name,reg,withDemos=true){
 function freshData(withDemos){
   const d={contacts:[],chats:{}};
   if(withDemos){
-    const team={id:uid(),name:'Kalisi Team',kalId:'KAL-TEAM-0001',color:'#F5A83C',bot:true,brain:'team',verified:true};
+    const team={id:uid(),name:'BharatApp Team',kalId:'KAL-TEAM-0001',color:'#06BA70',bot:true,brain:'team',verified:true};
     const ravi={id:uid(),name:'Ravi · Demo',kalId:kalId(),color:'#7FA8F5',bot:true,brain:'ravi'};
     const priya={id:uid(),name:'Priya · Demo',kalId:kalId(),color:'#E4739A',bot:true,brain:'priya'};
     d.contacts.push(team,ravi,priya);
     const t=now();
     d.chats[team.id]={timer:0,unread:2,msgs:[
-      {id:uid(),from:'them',kind:'text',text:'Welcome to Kalisi 🙏 Everything you send here stays on your phone. Our server only relays — then forgets.',ts:t-3600e3,status:'read'},
+      {id:uid(),from:'them',kind:'text',text:'Welcome to BharatApp 🙏 Everything you send here stays on your phone. Our server only relays — then forgets.',ts:t-3600e3,status:'read'},
       {id:uid(),from:'them',kind:'text',text:'This is a burn-on-read message. Tap it — it can be viewed exactly once.',ts:t-3500e3,status:'read',burn:true},
     ]};
     d.chats[ravi.id]={timer:0,unread:1,msgs:[
       {id:uid(),from:'them',kind:'text',text:'Bro app super undhi! Number ivvakunda chat 🔥',ts:t-1800e3,status:'read'},
     ]};
     d.chats[priya.id]={timer:0,unread:0,msgs:[
-      {id:uid(),from:'me',kind:'text',text:'Hi Priya, testing Kalisi',ts:t-7200e3,status:'read',receipt:'pending'},
+      {id:uid(),from:'me',kind:'text',text:'Hi Priya, testing BharatApp',ts:t-7200e3,status:'read',receipt:'pending'},
       {id:uid(),from:'them',kind:'text',text:'Hey! Yes it works great 😍',ts:t-7100e3,status:'read'},
     ]};
   }
@@ -183,7 +183,7 @@ function renderChats(){
     .filter(({c})=>!isBlocked(c.kalId))
     .filter(({c})=>c.name.toLowerCase().includes(q))
     .sort((a,b)=>(b.ch.msgs.at(-1)?.ts||0)-(a.ch.msgs.at(-1)?.ts||0));
-  if(!rows.length){list.innerHTML=`<div class="empty"><b>No chats yet.</b><br>Go to <b>Connect</b> to add a friend by QR or Kalisi ID.</div>`;return;}
+  if(!rows.length){list.innerHTML=`<div class="empty"><b>No chats yet.</b><br>Go to <b>Connect</b> to add a friend by QR or BharatApp ID.</div>`;return;}
   for(const {c,ch} of rows){
     const last=ch.msgs.at(-1);
     const row=document.createElement('div'); row.className='chat-row'+(c.id===curChat?' active':'');
@@ -245,7 +245,7 @@ function drawQR(slotId,text){
 function openMyQR(){
   const m=me();
   $('qr-body').innerHTML=`
-    <h2>My Kalisi ID</h2>
+    <h2>My BharatApp ID</h2>
     <p class="sub">Show this to a friend. They scan → you're connected. Your number stays yours.</p>
     <div class="qr-card">
       <div class="myid">${esc(handleOf(m))}</div>
@@ -262,7 +262,7 @@ function simulateScan(){
   D().contacts.push(c); chat(c.id); save();
   toast(`${c.name} connected via QR ✅`); renderChats();
   switchTab(document.querySelector('.tab[data-pane="pane-chats"]')); openChat(c.id);
-  setTimeout(()=>{ botSend(c.id,'Hey! Scanned your QR, we are connected on Kalisi now 🙌'); },1200);
+  setTimeout(()=>{ botSend(c.id,'Hey! Scanned your QR, we are connected on BharatApp now 🙌'); },1200);
 }
 async function addById(){
   if(!me().token){toast('⚠️ This account was created offline and cannot chat. Log out (Privacy tab) and sign up again.');return;}
@@ -277,7 +277,7 @@ async function addById(){
     $('add-id').value='';
     if(isAccepted(c.kalId)){ switchTab(document.querySelector('.tab[data-pane="pane-chats"]')); openChat(c.id); }
     renderConnect();
-  }catch(e){ toast(e.message==='not_found'?'No Kalisi user with that name':(e.message==='bad_id'?'Invalid username':'Could not reach server')); }
+  }catch(e){ toast(e.message==='not_found'?'No BharatApp user with that name':(e.message==='bad_id'?'Invalid username':'Could not reach server')); }
 }
 function makeInvite(){
   const code=Math.random().toString(36).slice(2,8).toUpperCase();
@@ -355,10 +355,10 @@ async function renderPrivacy(){
 
     <div class="sec-label">Account</div>
     <div class="pcard tight">
-      <button class="row-btn" onclick="openSheet('sheet-about')"><span class="row-ic">${ic.info}</span><span class="row-tx">About Kalisi · how it works</span><span class="row-ar">›</span></button>
+      <button class="row-btn" onclick="openSheet('sheet-about')"><span class="row-ic">${ic.info}</span><span class="row-tx">About BharatApp · how it works</span><span class="row-ar">›</span></button>
       <button class="row-btn danger" onclick="logout()"><span class="row-ic dz">${ic.logout}</span><span class="row-tx">Log out from this phone</span><span class="row-ar">›</span></button>
     </div>
-    <p class="priv-foot">Kalisi · your privacy, respected<br>All data lives on this device only</p>`;
+    <p class="priv-foot">BharatApp · your privacy, respected<br>All data lives on this device only</p>`;
 }
 function timerOptions(sel){
   const o=[[0,'Off'],[21600,'6 hours'],[43200,'12 hours'],[86400,'24 hours'],[604800,'7 days'],[2592000,'30 days']];
@@ -517,7 +517,7 @@ function ticks(m){
 }
 function renderMsgs(scroll){
   const box=$('msgs'); const ch=chat(curChat); const c=contact(curChat);
-  box.innerHTML = ch.msgs.length<=6 ? `<div class="enc-note">🔒 Messages are end-to-end encrypted and stored only on your phones. Kalisi's server relays them, then deletes its copy.</div>` : '';
+  box.innerHTML = ch.msgs.length<=6 ? `<div class="enc-note">🔒 Messages are end-to-end encrypted and stored only on your phones. BharatApp's server relays them, then deletes its copy.</div>` : '';
   let lastDay='';
   for(const m of ch.msgs){
     const day=fmtDay(m.ts);

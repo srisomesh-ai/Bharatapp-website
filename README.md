@@ -1,6 +1,6 @@
-# Kalisi — Private messenger. No phone number.
+# BharatApp — Private messenger. No phone number.
 
-**Always together, always private.** Kalisi (కలిసి, "together") — a WhatsApp-class messenger where identity is a @username, never a phone number. End-to-end encrypted; chats live only on your phone. Domain: bharatapp.chat
+**Always together, always private.** BharatApp — a WhatsApp-class messenger where identity is a @username, never a phone number. End-to-end encrypted; chats live only on your phone. Domain: bharatapp.chat
 
 ## Project structure
 ```
@@ -52,4 +52,4 @@ Server password: create `api/config.local.php` on the server with `<?php define(
 ## Admin panel URL
 The admin panel lives at an obfuscated path for security: **/panel-x7k9/**
 (the plain /admin/ is a decoy 404). Change the folder name anytime by renaming it;
-robots.txt hides it from crawlers. Default login someswara / Kalisi@Admin2026 — change it.
+robots.txt hides it from crawlers. Default login someswara / BharatApp@Admin2026 — change it.

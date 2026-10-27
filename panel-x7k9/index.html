@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0D1120">
 <meta name="robots" content="noindex,nofollow">
-<title>Kalisi Admin</title>
+<title>BharatApp Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0D1120;--panel:#161C30;--panel2:#1E2540;--line:#28304F;--text:#EDEEF4;--muted:#8A91AB;--faint:#5A6180;--gold:#F5A83C;--ember:#E4573F;--ok:#59C98D;--disp:'Bricolage Grotesque',system-ui,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}
@@ -65,7 +65,7 @@ tr:last-child td{border-bottom:none}
   <div id="login">
     <div class="logo">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="11" rx="3" fill="#F5A83C"/><path d="M7 10V7a5 5 0 0 1 10 0v3" stroke="#F5A83C" stroke-width="2.4"/><circle cx="12" cy="15.5" r="1.8" fill="#0D1120"/></svg>
-      Kalisi Admin
+      BharatApp Admin
     </div>
     <div class="sub">Restricted area — operator access only.</div>
     <label>Username</label>
@@ -81,7 +81,7 @@ tr:last-child td{border-bottom:none}
     <div class="top">
       <div class="logo">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="11" rx="3" fill="#F5A83C"/><path d="M7 10V7a5 5 0 0 1 10 0v3" stroke="#F5A83C" stroke-width="2.4"/><circle cx="12" cy="15.5" r="1.8" fill="#0D1120"/></svg>
-        Kalisi Admin
+        BharatApp Admin
       </div>
       <button class="btn ghost sm" onclick="loadAll()">↻ Refresh</button>
       <button class="btn amber sm" onclick="doWipe()">⚠ Wipe all data</button>
@@ -114,7 +114,7 @@ tr:last-child td{border-bottom:none}
     </div>
 
     <div id="view-trace" style="display:none">
-      <p class="muted" style="margin:4px 0 10px">Use only on a lawful order. Paste the exact forwarded text, or its 64-character fingerprint. Kalisi never sees message content — only fingerprints of forwarded messages are kept.</p>
+      <p class="muted" style="margin:4px 0 10px">Use only on a lawful order. Paste the exact forwarded text, or its 64-character fingerprint. BharatApp never sees message content — only fingerprints of forwarded messages are kept.</p>
       <textarea id="trace-in" rows="4" style="width:100%;box-sizing:border-box;border-radius:11px;padding:10px;font:inherit" placeholder="Forwarded message text or fingerprint"></textarea>
       <button class="btn" style="margin:10px 0" onclick="doTrace()">Find originator</button>
       <div id="trace-out"></div>
@@ -154,8 +154,8 @@ async function doLogin(){
 }
 function doLogout(){ call('logout',{}).catch(()=>{}); logoutLocal(); }
 async function doWipe(){
-  if(!confirm('WIPE ALL DATA?\n\nThis permanently deletes every user, message, status, group and contact from Kalisi. Cannot be undone.'))return;
-  if(!confirm('Are you absolutely sure? This erases the entire Kalisi database.'))return;
+  if(!confirm('WIPE ALL DATA?\n\nThis permanently deletes every user, message, status, group and contact from BharatApp. Cannot be undone.'))return;
+  if(!confirm('Are you absolutely sure? This erases the entire BharatApp database.'))return;
   try{ await call('wipe_all',{}); toast('All data wiped'); loadAll(); }catch(e){ toast(e.message); }
 }
 function logoutLocal(){ TOKEN=''; sessionStorage.removeItem('kalisi_admin_token'); $('panel').style.display='none'; $('login').style.display='block'; }

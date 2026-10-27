@@ -10,8 +10,8 @@ function saveFile(name, textData){
   return true;
 }
 
-/* Kalisi network + E2E crypto */
-/* ============ Kalisi network + E2E crypto layer ============ */
+/* BharatApp network + E2E crypto */
+/* ============ BharatApp network + E2E crypto layer ============ */
 // When the app is bundled (loaded from file:// or the app asset host), use the
 // absolute server URL. On the website it stays relative.
 const API_SERVER='https://bharatapp.chat';
@@ -117,8 +117,8 @@ async function restoreFile(input){
   const f=input.files[0]; input.value='';
   if(!f)return;
   let pack;
-  try{ pack=JSON.parse(await f.text()); }catch(e){ toast('Not a Kalisi backup file'); return; }
-  if(!pack||pack.kalisi_backup!==1||!pack.data){ toast('Not a Kalisi backup file'); return; }
+  try{ pack=JSON.parse(await f.text()); }catch(e){ toast('Not a BharatApp backup file'); return; }
+  if(!pack||pack.kalisi_backup!==1||!pack.data){ toast('Not a BharatApp backup file'); return; }
   const pass=await kPrompt({title:'Enter backup passphrase',message:'The passphrase you set when creating this backup.',placeholder:'Passphrase',password:true,okText:'Restore'});
   if(!pass)return;
   try{
@@ -259,7 +259,7 @@ async function autoBackup(force){
     const key=await pbkey(pass,salt);
     const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(S)));
     const pack={kalisi_backup:1,auto:1,ts:now(),salt:b64(salt),iv:b64(iv),data:b64(ct)};
-    saveFile('Kalisi-backup.kbk', JSON.stringify(pack));
+    saveFile('BharatApp-backup.kbk', JSON.stringify(pack));
     if(S){ S.lastBackup=now(); const m=me(); if(m)m.backedUp=true; save(); }
   }catch(e){}
 }

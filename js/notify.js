@@ -1,4 +1,4 @@
-/* ============ Kalisi in-app notifications: sound + vibration ============ */
+/* ============ BharatApp in-app notifications: sound + vibration ============ */
 
 /* Short pleasant "ding" via WebAudio (no asset file needed) */
 let _audioCtx=null;
@@ -35,7 +35,7 @@ function notifyIncoming(c,m){
     if(document.hidden && 'Notification' in window && Notification.permission==='granted'){
       const body = m.kind==='text' ? m.text
                  : (m.kind==='voice'?'🎙 Voice message':(m.kind==='img'?'🖼 Photo':'New message'));
-      const n=new Notification((c.name||'Kalisi'), {body, icon:'/icon-192.png', tag:c.id});
+      const n=new Notification((c.name||'BharatApp'), {body, icon:'/icon-192.png', tag:c.id});
       n.onclick=()=>{ window.focus(); openChat(c.id); n.close(); };
     }
   }catch(e){}
