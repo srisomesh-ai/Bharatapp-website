@@ -74,6 +74,11 @@
 .lp-steps b{display:block;font-size:17px}
 .lp-steps span{color:var(--lp-soft)}
 .lp-quote{font-family:Newsreader,Georgia,serif;font-size:24px;line-height:1.38;max-width:26em;margin:0;color:var(--lp-ink)}
+.lp-quote span{display:block}
+.lp-hi{font-family:"Noto Serif Devanagari",Newsreader,serif;font-weight:600;font-size:30px;line-height:1.45;color:var(--lp-green)}
+.lp-en{font-style:italic;margin-top:4px}
+.lp-body{font:16.5px/1.6 Inter,sans-serif;color:var(--lp-soft);margin-top:16px;max-width:34em}
+.lp-body b{color:var(--lp-ink);font-weight:600}
 .lp-quote cite{display:block;font:500 14px Inter,sans-serif;color:var(--lp-soft);margin-top:14px;font-style:normal}
 .lp-foot{border-top:1px solid var(--lp-rule);padding:28px 0 calc(env(safe-area-inset-bottom) + 44px);font-size:13.5px;color:var(--lp-soft);
   display:flex;flex-wrap:wrap;gap:10px 26px}
@@ -91,6 +96,7 @@
   .lp-two{display:grid;grid-template-columns:.8fr 1.2fr;gap:64px}
   .lp-h2{font-size:40px}
   .lp-quote{font-size:28px}
+  .lp-hi{font-size:40px}
   #scr-landing .ph{width:300px}
 }
 
