@@ -1,4 +1,4 @@
-/* ============ BharatApp landing + entry routing ============ */
+/* ============ BharatApp Chat landing + entry routing ============ */
 
 // Decide first screen: returning user with an account skips landing.
 function isNativeApp(){
@@ -21,9 +21,9 @@ function handleInvite(){
 }
 function showInvite(u){
   const signedIn=!!(S&&S.identities&&S.identities.length&&me()?.token);
-  kConfirm({title:'Chat with @'+u+' on BharatApp',
+  kConfirm({title:'Chat with @'+u+' on BharatApp Chat',
     message:signedIn?'Send @'+u+' a contact request? You can chat once they accept.'
-                    :'Get the BharatApp app to connect with @'+u+', or create an account here in your browser.',
+                    :'Get the BharatApp Chat app to connect with @'+u+', or create an account here in your browser.',
     okText:signedIn?'Connect':'Get it on Google Play', cancelText:signedIn?'Not now':'Use in browser'})
   .then(async ok=>{
     if(!signedIn){ if(ok){ location.href=PLAY_URL; } else { window._pendingInvite=u; landStart(); } return; }

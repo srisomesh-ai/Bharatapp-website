@@ -253,10 +253,13 @@
   .sheet.on{transform:translate(-50%,50%)}
 }
 
-/* BharatApp logo + two-tone wordmark */
+/* BharatApp Chat logo + two-tone wordmark */
 .brand-ic{width:28px;height:28px;border-radius:7px;flex:none}
 .ob-logo .brand-ic{width:30px;height:30px}
 .wm{font-family:var(--disp);font-weight:800;letter-spacing:-.01em;text-transform:none}
 .wm b{font-weight:800;color:#06BA70}
 #scr-landing .wm{color:#EDEEF4}
 .ob-logo .wm{color:var(--text);font-size:19px;letter-spacing:-.01em}
+
+.wm i{font-style:normal;font-weight:600;opacity:.72;margin-left:1px}
+.brand small{font-family:var(--disp);font-size:.62em;font-weight:600;color:var(--muted);margin-left:3px;letter-spacing:0}

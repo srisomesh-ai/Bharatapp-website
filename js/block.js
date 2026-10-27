@@ -1,4 +1,4 @@
-/* ============ BharatApp block / unblock ============ */
+/* ============ BharatApp Chat block / unblock ============ */
 function isBlocked(kalId){ return (S.blocked||[]).includes(kalId); }
 async function blockContact(cid){
   const c=contact(cid); if(!c)return;

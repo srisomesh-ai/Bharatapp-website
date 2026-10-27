@@ -1,4 +1,4 @@
-/* ============ BharatApp groups (server-relayed) ============ */
+/* ============ BharatApp Chat groups (server-relayed) ============ */
 
 function openNewGroup(){
   const reals=D().contacts.filter(c=>c.real&&!isBlocked(c.kalId));

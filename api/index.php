@@ -1,6 +1,6 @@
 <?php
 /* ============================================================
-   BharatApp Relay API v1 — relay-and-delete message queue
+   BharatApp Chat Relay API v1 — relay-and-delete message queue
    The server stores ONLY: kalisi IDs, public keys, and
    encrypted blobs it cannot read — deleted on delivery.
    ============================================================ */
@@ -181,7 +181,7 @@ function send(PDO $pdo, array $in): void {
     }
     // other call signalling is silent — the app is already awake by then
   } else {
-    sendPush($pdo, $to, 'BharatApp', $sname.' sent you a message', $me['kal_id']);
+    sendPush($pdo, $to, 'BharatApp Chat', $sname.' sent you a message', $me['kal_id']);
   }
   out(true, ['queued' => true]);
 }
@@ -528,11 +528,11 @@ function echoToMyDevices(PDO $pdo, array $me, string $peer, string $cid, string 
 
 function sendOtpMail(string $to, string $code): bool {
   $from = defined('MAIL_FROM') ? MAIL_FROM : 'no-reply@bharatapp.chat';
-  $subject = 'Your BharatApp code: ' . $code;
-  $body = "Your BharatApp verification code is:\r\n\r\n    $code\r\n\r\n"
+  $subject = 'Your BharatApp Chat code: ' . $code;
+  $body = "Your BharatApp Chat verification code is:\r\n\r\n    $code\r\n\r\n"
         . "It expires in 10 minutes. If you didn't ask for it, ignore this email.\r\n\r\n"
-        . "Your email is never shown to your contacts.\r\n— BharatApp";
-  $headers = "From: BharatApp <$from>\r\nReply-To: support@bharatapp.chat\r\n"
+        . "Your email is never shown to your contacts.\r\n— BharatApp Chat";
+  $headers = "From: BharatApp Chat <$from>\r\nReply-To: support@bharatapp.chat\r\n"
            . "Content-Type: text/plain; charset=utf-8\r\n";
   try { return @mail($to, $subject, $body, $headers, '-f' . $from); }
   catch (Throwable $e) { return false; }
@@ -747,7 +747,7 @@ function pushCheck(PDO $pdo, array $in): void {
 /* Send a push to yourself and report what FCM said. */
 function pushTest(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
-  $result = sendPush($pdo, $me['kal_id'], 'BharatApp', 'Test notification',
+  $result = sendPush($pdo, $me['kal_id'], 'BharatApp Chat', 'Test notification',
                      $me['kal_id'], 'message', true);
   out(true, ['sent' => $result]);
 }

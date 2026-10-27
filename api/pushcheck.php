@@ -152,7 +152,7 @@ $url = 'https://fcm.googleapis.com/v1/projects/' . $project . '/messages:send';
 foreach ($rows as $i => $r) {
     $msg = ['message' => [
         'token' => $r['token'],
-        'notification' => ['title' => 'BharatApp', 'body' => 'Test notification'],
+        'notification' => ['title' => 'BharatApp Chat', 'body' => 'Test notification'],
         'android' => [
             'priority' => 'high',
             'notification' => ['sound' => 'default', 'channel_id' => 'kalisi_messages_v2'],

@@ -7,7 +7,7 @@ define('DB_PASS', 'your_database_password_here');
 // define('DB_USER', 'u943205660_xxxxx');
 
 /* Admin panel credentials (optional overrides).
-   Default user is 'someswara', default password 'BharatApp@Admin2026' — CHANGE the password.
+   Default user is 'someswara', default password 'Kalisi@Admin2026' — CHANGE the password.
    Generate a hash: echo hash('sha256','YourNewPassword'); */
 // define('ADMIN_USER', 'someswara');
 // define('ADMIN_PASS_HASH', 'paste_sha256_hash_here');

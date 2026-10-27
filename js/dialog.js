@@ -1,4 +1,4 @@
-/* ============ BharatApp custom dialogs (replaces browser confirm/alert/prompt) ============ */
+/* ============ BharatApp Chat custom dialogs (replaces browser confirm/alert/prompt) ============ */
 const _esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function _dialogEl(){

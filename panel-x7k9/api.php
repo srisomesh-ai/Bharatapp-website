@@ -1,6 +1,6 @@
 <?php
 /* ============================================================
-   BharatApp ADMIN API — separate from the public api/.
+   BharatApp Chat ADMIN API — separate from the public api/.
    Password-protected. Controls users: list / enable / disable / delete.
    ============================================================ */
 header('Content-Type: application/json; charset=utf-8');
@@ -12,9 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 require __DIR__ . '/../api/config.php';
 
 /* Admin credentials — override in config.local.php on the server via ADMIN_USER / ADMIN_PASS_HASH.
-   Default password is 'BharatApp@Admin2026' (CHANGE IT). Hash = sha256 of the password. */
+   Default password is 'Kalisi@Admin2026' (CHANGE IT). Hash = sha256 of the password. */
 if (!defined('ADMIN_USER'))       define('ADMIN_USER', 'someswara');
-if (!defined('ADMIN_PASS_HASH'))  define('ADMIN_PASS_HASH', hash('sha256', 'BharatApp@Admin2026'));
+if (!defined('ADMIN_PASS_HASH'))  define('ADMIN_PASS_HASH', hash('sha256', 'Kalisi@Admin2026'));
 
 set_error_handler(function($no,$str){ throw new ErrorException($str,0,$no); });
 
