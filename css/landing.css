@@ -110,3 +110,4 @@
 .lp-bharat-card b{display:block;font-family:"Noto Serif Devanagari",Newsreader,serif;font-weight:600;font-size:24px;color:var(--lp-green);line-height:1.35}
 .lp-bharat-card span{display:block;font:italic 16px Newsreader,Georgia,serif;color:var(--lp-ink);margin-top:2px}
 .lp-bharat-card small{display:block;font:13.5px/1.5 Inter,sans-serif;color:var(--lp-soft);margin-top:6px}
+.lp-sugg{border:1px solid #CFE9DB;background:#EFFAF3;color:#0A7D4F;border-radius:999px;padding:3px 10px;font:600 13px Inter,sans-serif;margin:4px 6px 0 0}

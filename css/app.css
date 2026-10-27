@@ -231,3 +231,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:var(--text)}
 
 .ob-why{font-size:12.5px;line-height:1.45;color:#8A91AB;margin:7px 2px 0}
 #scr-onboard .ob-lockup{height:34px;width:auto;display:block}
+.ob-sugg{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.ob-sugg button{border:1px solid #CFE9DB;background:#EFFAF3;color:#0A7D4F;border-radius:999px;padding:6px 12px;font:600 13px Inter,sans-serif}
+#ob-user-status.ok{color:#0A9F5F;font-weight:600}
+#ob-user-status.bad{color:#C2412D;font-weight:600}

@@ -79,20 +79,59 @@ function freshData(withDemos){
 }
 
 /* ---------- onboarding ---------- */
-async function obSendCode(){
-  const email=($('ob-email').value||'').trim();
-  if(!/^[^@\s]+@(gmail|googlemail)\.com$/i.test(email)){toast('Enter a Gmail address');return;}
-  const b=$('ob-send-code'); b.disabled=true;
+/* ---- sign-up: A) name, @username, Gmail → code sent; B) code + password → account → sign in ---- */
+const USER_MSG={premium:'Names with only letters are for BharatApp Premium — add a number, or pick one below',
+  rules:'Use 4 or more letters and at least 1 number (letters, numbers, _)',
+  taken:'is taken — try one of these',invalid:'Only letters, numbers and _'};
+let _obUserT=null,_obUserOk='';
+function _obSugg(list){
+  const box=$('ob-sugg'); box.innerHTML='';
+  for(const u of list||[]){
+    const b=document.createElement('button'); b.type='button'; b.textContent='@'+u;
+    b.onclick=()=>{ $('ob-user').value=u; obCheckUser(); };
+    box.appendChild(b);
+  }
+}
+function obCheckUser(){
+  const el=$('ob-user'), st=$('ob-user-status');
+  const v=el.value.replace(/^@+/,'').toLowerCase().replace(/[^a-z0-9_]/g,'');
+  if(v!==el.value)el.value=v;
+  _obUserOk=''; clearTimeout(_obUserT); _obSugg([]);
+  if(!v){ st.className='ob-why'; st.textContent='4 or more letters and at least 1 number, e.g. sri_in7 or jenny21'; return; }
+  st.className='ob-why'; st.textContent='Checking @'+v+'…';
+  _obUserT=setTimeout(async()=>{
+    try{
+      const r=await api('check',{username:v});
+      if($('ob-user').value!==v)return;
+      if(r.available){ _obUserOk=v; st.className='ob-why ok'; st.textContent='✓ @'+v+' is available'; return; }
+      st.className='ob-why bad';
+      st.textContent=r.reason==='taken'?'@'+v+' '+USER_MSG.taken:(USER_MSG[r.reason]||USER_MSG.rules);
+      _obSugg(r.suggestions);
+    }catch(e){ st.className='ob-why'; st.textContent='Could not check right now'; }
+  },350);
+}
+const OB_ERR={bad_email:'Enter a valid Gmail address',email_required:'Verify your Gmail first',
+  wrong_code:'Wrong code — check your Gmail',code_expired:'Code expired — go Back and tap Create again',
+  too_soon:'Wait a minute before asking for another code',too_many:'Too many tries — try again in an hour',
+  email_send_failed:'Could not send the email — try again',email_in_use:'This Gmail already has an account — log in instead',
+  email_limit:'This Gmail already has an account — log in instead',username_taken:'That @username was just taken — go Back and pick another',
+  bad_username:USER_MSG.rules,premium_username:USER_MSG.premium};
+async function obStart(){
+  const n=$('ob-name').value.trim(), un=$('ob-user').value.trim(), email=($('ob-email').value||'').trim();
+  if(!n){toast('Enter your name');return;}
+  if(!un){toast('Choose a @username');return;}
+  if(_obUserOk!==un){ obCheckUser(); toast('Pick an available @username first'); return; }
+  if(!/^[^@\s]+@(gmail|googlemail)\.com$/i.test(email)){toast('Enter your Gmail address');return;}
+  const b=$('ob-create'); b.disabled=true;
   try{
     await api('email_otp_send',{email});
-    $('ob-code-field').classList.remove('hide'); $('ob-code').focus();
-    toast('Code sent — check your Gmail');
-  }catch(e){
-    toast({bad_email:'Enter a valid Gmail address',too_soon:'Wait '+(e.wait||60)+'s before asking again',
-           too_many:'Too many codes — try again in an hour',email_send_failed:'Could not send the email — try again'}[e.message]||'Could not send code');
-  }
-  setTimeout(()=>{b.disabled=false;},30000);
+    $('ob-sent').innerHTML='We sent a 6-digit code to <b>'+esc(email)+'</b>.';
+    $('ob-a').classList.add('hide'); $('ob-b').classList.remove('hide');
+    setTimeout(()=>$('ob-code').focus(),150);
+  }catch(e){ toast(OB_ERR[e.message]||'Could not send the code — check your internet'); }
+  finally{ b.disabled=false; }
 }
+function obBack(){ $('ob-b').classList.add('hide'); $('ob-a').classList.remove('hide'); }
 /* A guessable password would let someone rebuild the account key, so ask for
    a reasonable one: 8+ characters, letters and numbers, not the username. */
 function passwordProblem(pass,username){
@@ -104,17 +143,13 @@ function passwordProblem(pass,username){
   return '';
 }
 async function obCreate(){
-  const n=$('ob-name').value.trim();
-  if(!n){toast('Enter a name first');return;}
-  const un=($('ob-user').value||'').trim().replace(/^@/,'').toLowerCase();
-  if(!/^[a-z0-9_]{4,30}$/.test(un)){toast('Username: at least 4 letters, numbers or _');return;}
+  const n=$('ob-name').value.trim(), un=$('ob-user').value.trim();
   const email=($('ob-email').value||'').trim(), code=($('ob-code').value||'').trim();
-  if(!email){toast('Enter your Gmail and tap Send code');return;}
-  if(!/^\d{6}$/.test(code)){toast('Enter the 6-digit code from your email');return;}
-  const pass=$('ob-pass').value||'';
+  const pass=$('ob-pass').value||'', pass2=$('ob-pass2').value||'';
+  if(!/^\d{6}$/.test(code)){toast('Enter the 6-digit code from your Gmail');return;}
   const pwBad=passwordProblem(pass,un); if(pwBad){toast(pwBad);return;}
-  toast('Creating @'+un+'…');
-  let reg=null;
+  if(pass!==pass2){toast("The two passwords don't match");return;}
+  const b=$('ob-finish'); b.disabled=true; toast('Creating @'+un+'…');
   try{
     // the key comes from the password, exactly as in the Android app, so the
     // same account opens on the phone and in any browser
@@ -122,28 +157,15 @@ async function obCreate(){
     const keys=await keyFromPassword(un,pass,salt);
     const verifier=await verifierFor(un,pass,salt);
     const r=await api('register',{name:n,username:un,pubkey:keys.pub,email,email_code:code,salt,verifier});
-    reg={kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv};
-  }catch(e){
-    if(e.message==='username_taken'){toast('@'+un+' is taken — try another');return;}
-    if(e.message==='bad_username'){toast('Username: at least 4 letters, numbers or _');return;}
-    const emailErr={bad_email:'Enter a valid Gmail address',email_required:'Verify your Gmail first',
-      wrong_code:'Wrong code — check your email',code_expired:'Code expired — tap Send code again',
-      too_many:'Too many tries — ask for a new code',email_limit:'This Gmail already has an account',email_in_use:'This Gmail already has an account — log in instead'}[e.message];
-    if(emailErr){toast(emailErr);return;}
-    const demo=await kConfirm({title:'Server unreachable',message:'A real account cannot be created right now. Continue in offline demo mode? (demo bots only — no real chatting, no @username reserved)',okText:'Demo mode',cancelText:'Cancel'});
-    if(!demo)return;
-  }
-  const ident=seedIdentity(n,reg);
-  $('ob-card-id').textContent=ident.username?'@'+ident.username:ident.kalId;
-  $('ob-card-name').textContent=n+' · '+ident.kalId;
-  window._keySaved=false;
-  // No backup prompt for anyone. Account is created → mark backed-up (app auto-saves silently) and enter.
-  if(me()){ me().backedUp=true; save(); }
-  // brief confirmation card, then straight into the app
-  $('ob-step1').classList.add('hide');
-  $('ob-step2').classList.remove('hide');
-  $('ob-backup-block')?.classList.add('hide');
-  const webBtn=$('ob-enter-web'); if(webBtn){ webBtn.classList.remove('hide'); }
+    // this browser proved the Gmail, so the first sign-in needs no second code
+    if(r.trust){ try{ localStorage.setItem('bharatapp_trust_'+r.username,r.trust); }catch(e){} }
+    $('ob-pass').value=''; $('ob-pass2').value=''; $('ob-code').value='';
+    obBack(); $('ob-user').value=''; _obUserOk='';
+    showLogin();
+    $('lg-user').value=r.username||un; setTimeout(()=>$('lg-pass').focus(),250);
+    lgMsg('✓ Account created — sign in with your password.');
+  }catch(e){ toast(OB_ERR[e.message]||'Could not create the account — check your internet'); }
+  finally{ b.disabled=false; }
 }
 async function obSaveKey(){
   await backupData();

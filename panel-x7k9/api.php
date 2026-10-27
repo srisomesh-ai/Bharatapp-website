@@ -35,6 +35,7 @@ try {
     case 'list_users':   listUsers($pdo, $in); break;
     case 'set_disabled': setDisabled($pdo, $in); break;
     case 'delete_user':  deleteUser($pdo, $in); break;
+    case 'create_user':  createUser($pdo, $in); break;
     case 'list_groups':  listGroups($pdo); break;
     case 'trace':        traceForward($pdo, $in); break;
     case 'wipe_all':     wipeAll($pdo); break;
@@ -112,6 +113,50 @@ function setDisabled(PDO $pdo, array $in): void {
   $pdo->prepare('UPDATE k_users SET disabled = ? WHERE kal_id = ?')->execute([$val, $kid]);
   out(true, ['kal_id' => $kid, 'disabled' => $val]);
 }
+/**
+ * Make an account directly (e.g. a Play Store reviewer account, or a user who
+ * can't receive email). The panel derives the key from the password in the
+ * browser, exactly like sign-up, and sends only the public key, salt and
+ * verifier. Any @username is allowed here, including letters-only names.
+ * Leave the Gmail empty for an account that signs in with password alone.
+ */
+function createUser(PDO $pdo, array $in): void {
+  $u = strtolower(trim((string)($in['username'] ?? ''), " @"));
+  $name = trim((string)($in['name'] ?? ''));
+  $email = strtolower(trim((string)($in['email'] ?? '')));
+  $pub = $in['pubkey'] ?? null;
+  $verifier = (string)($in['verifier'] ?? '');
+  $salt = (string)($in['salt'] ?? '');
+  if (!preg_match('/^[a-z0-9_]{3,30}$/', $u)) out(false, ['error' => 'bad_username']);
+  if ($name === '' || mb_strlen($name) > 24) out(false, ['error' => 'bad_name']);
+  if (!is_array($pub) || $verifier === '' || $salt === '' || strlen($verifier) > 128 || strlen($salt) > 128) out(false, ['error' => 'bad_input']);
+  if ($email !== '') {
+    // same form the sign-up stores, so Gmail login codes find the account
+    if (!preg_match('/^([a-z0-9.+_-]{1,64})@(gmail\.com|googlemail\.com)$/', $email, $m)) out(false, ['error' => 'bad_email']);
+    $email = str_replace('.', '', explode('+', $m[1], 2)[0]) . '@gmail.com';
+  }
+  $st = $pdo->prepare('SELECT 1 FROM k_users WHERE username = ?'); $st->execute([$u]);
+  if ($st->fetch()) out(false, ['error' => 'username_taken']);
+  if ($email !== '') {
+    $st = $pdo->prepare('SELECT 1 FROM k_users WHERE email = ?'); $st->execute([$email]);
+    if ($st->fetch()) out(false, ['error' => 'email_in_use']);
+  }
+  unset($pub['d']);
+  $a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  for ($i = 0; $i < 8; $i++) {
+    $kid = 'KAL-';
+    for ($j = 0; $j < 9; $j++) $kid .= $j === 4 ? '-' : $a[random_int(0, strlen($a) - 1)];
+    try {
+      $pdo->prepare('INSERT INTO k_users (kal_id, username, key_username, name, pubkey, token, email, verifier, salt, created_at, last_seen)
+                     VALUES (?,?,?,?,?,?,?,?,?,NOW(),NOW())')
+          ->execute([$kid, $u, $u, $name, json_encode($pub), bin2hex(random_bytes(24)),
+                     $email === '' ? null : $email, password_hash($verifier, PASSWORD_DEFAULT), $salt]);
+      out(true, ['kal_id' => $kid, 'username' => $u]);
+    } catch (PDOException $e) { /* id clash, try another */ }
+  }
+  out(false, ['error' => 'id_gen_failed']);
+}
+
 function deleteUser(PDO $pdo, array $in): void {
   $kid = strtoupper(trim((string)($in['kal_id'] ?? '')));
   if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $kid)) out(false, ['error' => 'bad_id']);
