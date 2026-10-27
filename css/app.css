@@ -29,7 +29,13 @@ input,textarea,select{font-family:inherit;font-size:16px;color:var(--text)}
   radial-gradient(circle at 1px 1px, rgba(6,186,112,.08) 1px, transparent 1.6px) 0 0/26px 26px,
   radial-gradient(circle at 14px 14px, rgba(90,97,120,.05) 1px, transparent 1.6px) 0 0/26px 26px,
   linear-gradient(170deg,#F7F8FC 0%,#EEF1F8 55%,#E8ECF6 100%);
-  padding:max(env(safe-area-inset-top),28px) 26px 34px;justify-content:flex-end;overflow-y:auto}
+  padding:max(env(safe-area-inset-top),28px) 26px 34px;justify-content:flex-start;overflow-y:auto}
+/* Home + logo pinned at the top; the form sits at the bottom on phones and in
+   the middle on computers. Taller than the screen → it all scrolls from the
+   top (justify-content:flex-end used to push the top out of reach). */
+#scr-onboard>div{flex:1 0 auto;display:flex;flex-direction:column}
+#scr-onboard .ob-top{margin-bottom:auto;padding-bottom:22px}
+@media (min-width:768px){ #ob-step1,#ob-step2,#ob-login{margin-bottom:auto} }
 /* Onboarding light (default) text colors */
 #scr-onboard .ob-h1{color:#141A2E}
 #scr-onboard .ob-points li{color:#5A6178}

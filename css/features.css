@@ -263,3 +263,13 @@
 
 .wm i{font-style:normal;font-weight:600;opacity:.72;margin-left:1px}
 .brand small{font-family:var(--disp);font-size:.62em;font-weight:600;color:var(--muted);margin-left:3px;letter-spacing:0}
+
+/* sign-up / log-in: way back to the home page */
+.ob-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ob-back{display:inline-flex;align-items:center;gap:4px;background:none;border:1px solid var(--line);border-radius:20px;
+  padding:7px 14px 7px 9px;font:600 14px var(--body);color:var(--text);cursor:pointer}
+.ob-back:hover{background:var(--panel)}
+#scr-onboard .ob-back{border-color:#DDE1EC;color:#141A2E}
+:root[data-theme=dark] #scr-onboard .ob-back{border-color:#28304F;color:#EDEEF4}
+a.ob-logo{text-decoration:none;cursor:pointer}
+body.native-app .ob-back{display:none}
