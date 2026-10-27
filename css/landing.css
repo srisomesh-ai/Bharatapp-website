@@ -104,7 +104,9 @@
 .hero-start{background:linear-gradient(135deg,#06BA70,#029573);color:#fff;font-weight:800;box-shadow:0 12px 34px -10px rgba(6,186,112,.55);border:none;font-size:16px}
 .hero-start:active{transform:scale(.98)}
 .lp-bharat{padding:44px 0 48px}
-.lp-quote-hero{margin:0 0 18px;padding:2px 0 2px 16px;border-left:3px solid var(--lp-green);font-size:19px}
-.lp-quote-hero .lp-hi{font-size:24px;line-height:1.35}
-.lp-quote-hero .lp-body{font-size:15px;margin-top:10px}
-@media (min-width:900px){.lp-quote-hero{font-size:21px}.lp-quote-hero .lp-hi{font-size:28px}}
+/* Made-in-India note above the headline, with a tricolour edge */
+.lp-bharat-card{position:relative;background:#fff;border:1px solid var(--lp-rule);border-radius:14px;padding:16px 18px 14px 22px;margin-bottom:22px;overflow:hidden;max-width:520px}
+.lp-bharat-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:linear-gradient(#FF9933 0 33%,#fff 33% 66%,#138808 66%)}
+.lp-bharat-card b{display:block;font-family:"Noto Serif Devanagari",Newsreader,serif;font-weight:600;font-size:24px;color:var(--lp-green);line-height:1.35}
+.lp-bharat-card span{display:block;font:italic 16px Newsreader,Georgia,serif;color:var(--lp-ink);margin-top:2px}
+.lp-bharat-card small{display:block;font:13.5px/1.5 Inter,sans-serif;color:var(--lp-soft);margin-top:6px}
