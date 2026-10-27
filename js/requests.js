@@ -1,4 +1,4 @@
-/* ============ BharatApp contact requests (Instagram-style) ============ */
+/* ============ BharatApp Chat contact requests (Instagram-style) ============ */
 let _reqIn=[];       // incoming pending requests
 let _acceptedKal=[]; // accepted contact kal_ids
 let _pendingOut=[];  // requests I sent, awaiting their accept
