@@ -258,3 +258,13 @@
   .bx-w2{grid-column:auto}
 }
 @media (min-width:760px){ .bx-login{margin-left:8px} }
+/* the dark username box: white text, whatever the site-wide input colours say */
+#scr-landing .bx-claim input{color:#fff;-webkit-text-fill-color:#fff;caret-color:#2BC46D}
+#scr-landing .bx-claim input::placeholder{color:#8C8174;-webkit-text-fill-color:#8C8174}
+#scr-landing .bx-claim input::selection{background:#2BC46D;color:#06200F}
+#scr-landing .bx-status.bad{color:#6E1206;font-weight:700}
+#scr-landing .bx-status.ok{color:#04381F;font-weight:700}
+/* (the status line's class is reset by script; style it by its place) */
+#scr-landing .bx-hcard .lp-status{position:relative;z-index:1;color:#4A2E14}
+#scr-landing .bx-hcard .lp-status.bad{color:#6E1206;font-weight:700}
+#scr-landing .bx-hcard .lp-status.ok{color:#04381F;font-weight:700}
