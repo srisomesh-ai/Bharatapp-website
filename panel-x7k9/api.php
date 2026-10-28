@@ -84,30 +84,50 @@ function adminAuth(PDO $pdo, array $in): bool {
 
 /* ---------------- actions ---------------- */
 function adminStats(PDO $pdo): void {
+  // undelivered copies are kept at most 30 days (the Privacy Policy says so)
+  try { $pdo->exec("DELETE FROM k_queue WHERE created_at < (NOW() - INTERVAL 30 DAY)"); } catch (Throwable $e) {}
   $u = (int)$pdo->query("SELECT COUNT(*) c FROM k_users")->fetch()['c'];
+  $online = (int)$pdo->query("SELECT COUNT(*) c FROM k_users WHERE last_seen > (NOW() - INTERVAL 2 MINUTE)")->fetch()['c'];
+  $today = (int)$pdo->query("SELECT COUNT(*) c FROM k_users WHERE last_seen > (NOW() - INTERVAL 24 HOUR)")->fetch()['c'];
+  // what the queue is made of
+  $q = $pdo->query("SELECT
+        SUM(created_at > NOW() - INTERVAL 1 HOUR) AS hour,
+        SUM(created_at <= NOW() - INTERVAL 1 HOUR AND created_at > NOW() - INTERVAL 7 DAY) AS week,
+        SUM(created_at <= NOW() - INTERVAL 7 DAY) AS older,
+        COUNT(DISTINCT to_id) AS people
+      FROM k_queue")->fetch();
+  $idle = 0;
+  try {
+    $idle = (int)$pdo->query("SELECT COUNT(*) c FROM k_queue q JOIN k_devices d ON d.id = q.dev
+                               WHERE d.last_seen < (NOW() - INTERVAL 7 DAY)")->fetch()['c'];
+  } catch (Throwable $e) {}
   $active = (int)$pdo->query("SELECT COUNT(*) c FROM k_users WHERE last_seen > (NOW() - INTERVAL 7 DAY)")->fetch()['c'];
   $disabled = (int)$pdo->query("SELECT COUNT(*) c FROM k_users WHERE disabled = 1")->fetch()['c'];
   $queue = (int)$pdo->query("SELECT COUNT(*) c FROM k_queue")->fetch()['c'];
   $groups = 0; try { $groups = (int)$pdo->query("SELECT COUNT(*) c FROM k_groups")->fetch()['c']; } catch (Throwable $e) {}
-  out(true, ['stats' => ['users'=>$u,'active7d'=>$active,'disabled'=>$disabled,'queued'=>$queue,'groups'=>$groups]]);
+  out(true, ['stats' => ['users'=>$u,'online'=>$online,'offline'=>$u-$online,'today'=>$today,
+    'active7d'=>$active,'disabled'=>$disabled,'queued'=>$queue,'groups'=>$groups,
+    'queue'=>['hour'=>(int)($q['hour'] ?? 0),'week'=>(int)($q['week'] ?? 0),'older'=>(int)($q['older'] ?? 0),
+              'people'=>(int)($q['people'] ?? 0),'idle_devices'=>$idle]]]);
 }
 function listUsers(PDO $pdo, array $in): void {
   $q = trim((string)($in['q'] ?? ''));
   $limit = min(500, max(10, (int)($in['limit'] ?? 200)));
   if ($q !== '') {
-    $st = $pdo->prepare("SELECT kal_id, username, name, email, disabled, created_at, last_seen
+    $st = $pdo->prepare("SELECT kal_id, username, name, email, disabled, created_at, last_seen, TIMESTAMPDIFF(SECOND, last_seen, NOW()) AS seen_ago
                          FROM k_users WHERE username LIKE ? OR name LIKE ? OR kal_id LIKE ? OR email LIKE ?
                          ORDER BY last_seen DESC LIMIT $limit");
     $like = '%'.$q.'%'; $st->execute([$like,$like,$like,$like]);
   } else {
-    $st = $pdo->query("SELECT kal_id, username, name, email, disabled, created_at, last_seen
+    $st = $pdo->query("SELECT kal_id, username, name, email, disabled, created_at, last_seen, TIMESTAMPDIFF(SECOND, last_seen, NOW()) AS seen_ago
                        FROM k_users ORDER BY last_seen DESC LIMIT $limit");
   }
   $rows = array_map(fn($r)=>[
     'kal_id'=>$r['kal_id'],'username'=>$r['username'],'name'=>$r['name'],
     'email'=>$r['email'] ?? null,
     'disabled'=>(int)$r['disabled'],
-    'created_at'=>$r['created_at'],'last_seen'=>$r['last_seen']
+    'created_at'=>$r['created_at'],'last_seen'=>$r['last_seen'],
+    'seen_ago'=>$r['seen_ago'] === null ? null : (int)$r['seen_ago']
   ], $st->fetchAll());
   out(true, ['users' => $rows]);
 }
