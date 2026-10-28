@@ -102,6 +102,7 @@ tr:last-child td{border-bottom:none}
       <button class="tabb" id="tab-groups" onclick="showTab('groups')">Groups</button>
       <button class="tabb" id="tab-trace" onclick="showTab('trace')">Trace forward</button>
       <button class="tabb" id="tab-slides" onclick="showTab('slides')">Screenshots</button>
+      <button class="tabb" id="tab-support" onclick="showTab('support')">Support chats</button>
     </div>
 
     <div id="view-users">
@@ -137,6 +138,22 @@ tr:last-child td{border-bottom:none}
       <p class="muted" style="margin:4px 0 10px">Screenshots shown on the home page phone, changing every 2 seconds, in upload order. Use phone screenshots (portrait, PNG/JPG, up to 2 MB). With none uploaded, the home page shows its built-in example screens.</p>
       <label class="btn" style="cursor:pointer">Upload screenshot<input type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onchange="uploadSlides(this)"></label>
       <div id="slides-list" class="slides"></div>
+    </div>
+    <div id="view-support" style="display:none">
+      <div id="sup-setup" class="newuser" style="display:none">
+        <p><b>Set up BharatApp Chat Support</b></p>
+        <p class="muted">Creates the official <b>@support</b> account. Every user gets it in their chat list, and their messages arrive here. Messages are end-to-end encrypted, so this password is what opens the inbox — keep it safe; it can't be reset.</p>
+        <div class="nu-grid">
+          <input id="sup-pass" type="password" placeholder="Password (8+)" maxlength="100">
+          <input id="sup-pass2" type="password" placeholder="Same password again" maxlength="100">
+        </div>
+        <button class="btn" id="sup-go" onclick="createSupport()">Create support account</button>
+        <div id="sup-out" class="muted"></div>
+      </div>
+      <div id="sup-desk" style="display:none">
+        <p class="muted" style="margin:4px 0 10px">Chats people send to <b>@support</b>. Sign in once with the support password; this browser stays signed in. You also get an email when someone writes in. <a href="/?desk=1" target="_blank" rel="noopener">Open in a new tab ↗</a></p>
+        <iframe id="sup-frame" title="Support chats" style="width:100%;height:78vh;border:1px solid #E4E1D8;border-radius:14px;background:#fff"></iframe>
+      </div>
     </div>
     <div id="view-trace" style="display:none">
       <p class="muted" style="margin:4px 0 10px">Use only on a lawful order. Paste the exact forwarded text, or its 64-character fingerprint. BharatApp Chat never sees message content — only fingerprints of forwarded messages are kept.</p>
@@ -256,6 +273,28 @@ async function createUser(){
       bad_email:'Use a Gmail address (or leave it empty)',bad_username:'Username: 3–30 letters, numbers or _'}[e.message]||('Failed: '+e.message);
   }finally{ b.disabled=false; }
 }
+/* ---- Support chats: the @support account's inbox ---- */
+async function loadSupport(){
+  let has=false; try{ has=!!(await call('support',{})).kal_id; }catch(e){ toast(e.message); return; }
+  $('sup-setup').style.display=has?'none':'block';
+  $('sup-desk').style.display=has?'block':'none';
+  if(has&&!$('sup-frame').src)$('sup-frame').src='/?desk=1';
+}
+async function createSupport(){
+  const pass=$('sup-pass').value;
+  if(pass.length<8){ toast('Use 8 or more characters'); return; }
+  if(pass!==$('sup-pass2').value){ toast('The two passwords are different'); return; }
+  const b=$('sup-go'); b.disabled=true; $('sup-out').textContent='Creating…';
+  try{
+    const salt=newSalt(), username='support';
+    const keys=await keyFromPassword(username,pass,salt);
+    const verifier=await verifierFor(username,pass,salt);
+    await call('create_user',{name:'BharatApp Chat Support',username,email:'',pubkey:keys.pub,verifier,salt});
+    $('sup-pass').value=''; $('sup-pass2').value=''; $('sup-out').textContent='';
+    loadAll(); await loadSupport(); toast('Support account ready — sign in below');
+  }catch(e){ $('sup-out').textContent=e.message==='username_taken'?'@support already exists':'Failed: '+e.message; }
+  finally{ b.disabled=false; }
+}
 async function loadSlides(){
   try{ const r=await call('slides',{});
     $('slides-list').innerHTML=r.slides.length?r.slides.map(x=>`<figure><img src="${esc(x.url)}" alt=""><button class="btn sm red" onclick="delSlide('${esc(x.name)}')">Remove</button></figure>`).join(''):'<p class="muted">No screenshots yet.</p>';
@@ -278,7 +317,8 @@ async function loadStatsOnly(){ try{ const s=await call('stats',{}); const st=s.
     .map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join(''); }catch(e){} }
 function showTab(t){
   if(t==='slides')loadSlides();
-  for(const k of ['users','groups','trace','slides']){
+  if(t==='support')loadSupport();
+  for(const k of ['users','groups','trace','slides','support']){
     $('tab-'+k).classList.toggle('on',t===k); $('view-'+k).style.display=t===k?'block':'none';
   }
 }

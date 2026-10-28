@@ -61,7 +61,7 @@ function openSettings(){
       <div class="menu-it" onclick="backupData()">🔐 &nbsp;Save encrypted backup</div>
       <div class="menu-it" onclick="restorePick()">📥 &nbsp;Restore from backup</div>
       <div class="menu-it red" onclick="logout()">🚪 &nbsp;Log out from this phone</div>
-      ${me()?.token?'<div class="menu-it red" onclick="deleteAccount()">🗑 &nbsp;Delete account</div>':''}
+      ${me()?.token&&!DESK?'<div class="menu-it red" onclick="deleteAccount()">🗑 &nbsp;Delete account</div>':''}
     </div>
     <p class="qr-sub" style="text-align:center;margin:10px 0 4px">BharatApp Chat ${APP_VERSION} · BharatApp Chat by BharatApp Chat Media Private Limited<br><a href="/privacy.html" target="_blank">Privacy</a> · <a href="/terms.html" target="_blank">Terms</a></p>`;
   renderBlockedList();

@@ -34,6 +34,14 @@ function showInvite(u){
 }
 function bootRoute(){
   if(isNativeApp())document.body.classList.add('native-app');
+  if(DESK){
+    document.body.classList.add('desk');
+    if(S && S.identities && S.identities.length){ showApp(); return true; }
+    showLogin(true);
+    $('lg-user').value='support';
+    setTimeout(()=>$('lg-pass')?.focus(),250);
+    return false;
+  }
   const invited=handleInvite();
   if(S && S.identities && S.identities.length){
     // existing account on this device → straight to app
@@ -198,6 +206,7 @@ async function lgLogin(){
 }
 /* bring in everyone this account is connected with, so the chat list isn't empty */
 async function loadContactsAfterLogin(){
+  if(DESK)return;   // the support desk lists people as they write in
   try{
     const st=await api('contacts_state',authBody());
     for(const id of st.accepted||[]){ try{ await connectReal(id); }catch(e){} }

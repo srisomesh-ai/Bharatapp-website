@@ -6,7 +6,11 @@ function applyTheme(t){
   const meta=document.querySelector('meta[name=theme-color]'); if(meta)meta.setAttribute('content', t==='light'?'#F4F5FA':'#0D1120');
   S=S||{}; S.set=S.set||{}; S.set.theme=t; if(localStorage.getItem(LS_KEY))save();
 }
-const LS_KEY='kalisi_v1';
+/* ?desk=1 is the support desk (opened from the admin panel): it signs in as
+   @support and keeps its own storage, apart from anyone's personal account. */
+const DESK=new URLSearchParams(location.search).get('desk')==='1';
+const LS_KEY=DESK?'bharatapp_desk':'kalisi_v1';
+const SUPPORT_HANDLE='@support';
 const COLORS=['#06BA70','#7FA8F5','#59C98D','#E4739A','#B58CF0','#5FC9C9','#E4A05F'];
 let S=null;                 // app state
 let curChat=null;           // open contact id
@@ -33,6 +37,18 @@ function contact(id){return D().contacts.find(c=>c.id===id);}
 function chat(id){if(!D().chats[id])D().chats[id]={msgs:[],timer:0,unread:0};return D().chats[id];}
 function initials(n){return n.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();}
 function avatarHTML(o,cls){return `<div class="avatar ${cls||''}" style="background:${o.color}">${esc(initials(o.name))}</div>`;}
+
+/* Old sign-ups came with three made-up demo chats; clear them out. */
+function dropDemoContacts(){
+  if(!S||!S.data)return;
+  let changed=false;
+  for(const d of Object.values(S.data)){
+    const gone=(d.contacts||[]).filter(c=>c.bot);
+    for(const c of gone){ delete d.chats[c.id]; changed=true; }
+    if(gone.length)d.contacts=d.contacts.filter(c=>!c.bot);
+  }
+  if(changed)save();
+}
 
 /* ---------- first run ---------- */
 function seedIdentity(name,reg){
@@ -189,7 +205,7 @@ function renderChats(){
     const row=document.createElement('div'); row.className='chat-row'+(c.id===curChat?' active':'');
     row.innerHTML=`${avatarHTML(c)}
       <div class="chat-mid">
-        <div class="chat-name">${esc(c.name)} ${c.verified?'<span class="vtag">TEAM</span>':''}${c.idChanged?'<span class="vtag" style="color:var(--ember);border-color:rgba(228,87,63,.45)">ID CHANGED</span>':''}</div>
+        <div class="chat-name">${esc(c.name)} ${handleOf(c)===SUPPORT_HANDLE?'<span class="vtag">OFFICIAL</span>':''}${c.idChanged?'<span class="vtag" style="color:var(--ember);border-color:rgba(228,87,63,.45)">ID CHANGED</span>':''}</div>
         <div class="chat-last">${esc(lastMsgPreview(ch.msgs))}</div>
       </div>
       <div class="chat-side">
@@ -804,6 +820,7 @@ try{ history.pushState(null,''); }catch(e){}
 
 (function(){
   load();
+  dropDemoContacts();
   const inp=$('msg-in');
   inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,110)+'px';
     const has=inp.value.trim().length>0;
