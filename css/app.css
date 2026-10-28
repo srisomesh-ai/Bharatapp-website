@@ -279,3 +279,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:var(--text)}
 .info-act.red{color:#C0392B}
 /* support desk (admin panel): no sign-up or backup links on its log-in */
 body.desk .lg-link{display:none}
+.brow.mine .bub.is-waiting{background:#FDE2E0}
+.brow.mine .bub.is-read{background:#BCEBCF}
+[data-theme="dark"] .brow.mine .bub.is-waiting{background:#4A2626}
+[data-theme="dark"] .brow.mine .bub.is-read{background:#1E5A3C}
