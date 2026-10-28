@@ -1,6 +1,10 @@
 # Invite links from QR codes: bharatapp.chat/add/<username> → the page that
 # opens the app (or the Play Store, or connects in the browser)
 RewriteEngine On
+
+# One address for search engines: www.bharatapp.chat → bharatapp.chat
+RewriteCond %{HTTP_HOST} ^www\.bharatapp\.chat$ [NC]
+RewriteRule ^(.*)$ https://bharatapp.chat/$1 [R=301,L]
 RewriteRule ^add/([A-Za-z0-9_]{3,30})/?$ /?add=$1 [R=302,L]
 
 # Pages must never be served stale from a cache (Hostinger/LiteSpeed or the
