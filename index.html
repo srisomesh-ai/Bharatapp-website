@@ -30,7 +30,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Newsreader:opsz,wght@6..72,500&family=Noto+Serif+Devanagari:wght@600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css?v=3.7">
 <link rel="stylesheet" href="css/landing-voice.css?v=3.0">
-<link rel="stylesheet" href="css/landing.css?v=14">
+<link rel="stylesheet" href="css/landing.css?v=15">
 <link rel="stylesheet" href="css/features.css?v=3.0">
 </head>
 <body>
@@ -38,108 +38,81 @@
 <div id="phone">
   <!-- ============ LANDING (marketing homepage) ============ -->
   <div class="scr on" id="scr-landing">
-    <div class="land-scroll lp">
+    <div class="land-scroll lp bx">
       <div class="lp-w">
-        <header class="lp-nav">
+        <header class="lp-nav bx-nav">
           <a class="lp-brand" href="/"><img src="/icons/bharatapp-logo.png" alt="BharatApp Chat"></a>
           <nav class="lp-links"><a href="/features.html">Features</a><a href="/how-it-works.html">How it works</a><a href="/security.html">Security</a><a href="/privacy.html">Privacy</a><a href="/help.html">Help</a></nav>
-          <button class="lp-login" onclick="landRestore()">Log in</button>
+          <button class="bx-login" onclick="landRestore()">Log in</button>
         </header>
 
-        <section class="lp-hero">
-          <div>
-            <div class="lp-bharat-card">
+        <section class="bx-hero">
+          <div class="bx-hcard">
+            <div class="bx-bharat">
               <b lang="hi">“अपनी बातें, अपने देश में।”</b>
               <span>Our conversations, on our own terms.</span>
               <small>A messenger made in India, for every Indian — towards Aatmanirbhar Bharat.</small>
             </div>
-            <div class="lp-kicker">Messenger · Made in India</div>
-            <h1 class="lp-h1">Pick a username.<br>That's your number now.</h1>
-            <p class="lp-lead">BharatApp Chat works with a username you choose, not your phone number. Messages are encrypted on your phone and deleted from our server the moment they are delivered.</p>
-            <form class="lp-claim" onsubmit="lpClaim();return false" autocomplete="off">
-              <label class="lp-field" for="lp-user"><span>@</span><input id="lp-user" maxlength="30" placeholder="lakshmi7" autocapitalize="none" spellcheck="false" oninput="lpCheck()" aria-describedby="lp-status"></label>
-              <button class="lp-btn" type="submit">Claim it</button>
+            <h1 class="bx-h1">Say hello.<br>Keep your number private.</h1>
+            <p class="bx-lead">India's messenger where your @username is all anyone needs. Encrypted chats, calls and status — no phone number, no ads.</p>
+            <form class="bx-claim" onsubmit="lpClaim();return false" autocomplete="off">
+              <label for="lp-user"><span>@</span><input id="lp-user" maxlength="30" placeholder="lakshmi7" autocapitalize="none" spellcheck="false" oninput="lpCheck()" aria-describedby="lp-status"></label>
+              <button type="submit">Claim it →</button>
             </form>
-            <div class="lp-status" id="lp-status">4 or more letters and at least 1 number, e.g. jenny21</div>
-            <div class="lp-alt">
-              <span class="lp-get"><button class="lp-web" onclick="landRestore()">Open on the web</button><span class="lp-android">Android app <span class="lp-soon">Coming soon</span></span></span>
-              <span>Free · No ads · Already have an account? <button class="lp-inline" onclick="landRestore()">Log in</button></span>
+            <div class="lp-status bx-status" id="lp-status">4 or more letters and at least 1 number, e.g. jenny21</div>
+            <div class="bx-alt">
+              <button class="bx-web" onclick="landRestore()">Open on the web</button>
+              <span class="bx-android">Android app <span class="lp-soon">Coming soon</span></span>
+              <span class="bx-free">Free to use · No ads</span>
             </div>
           </div>
-          <div class="lp-vis" aria-hidden="true">
-            <div class="ph"><div class="ph-scr lp-slides" id="lp-slides">
-              <div class="lp-slide on"><div class="ph-top"><span class="ph-av">RK</span><div><b>Ravi Kumar</b><small>online</small></div></div>
-              <div class="ph-body">
-                <div class="ph-day">Today</div>
-                <div class="pb in">Reached the station. Where are you?</div>
-                <div class="pb out">5 min, near the metro gate<i>10:42</i></div>
-                <div class="pb in">Ok. Sending the ticket</div>
-                <div class="pb in file"><span>PDF</span>train-ticket.pdf<small>182 KB</small></div>
-                <div class="pb out">Got it 👍<i>10:44</i></div>
-              </div>
-              <div class="ph-in"><span>Message</span><em></em></div></div>
-              <div class="lp-slide"><div class="lp-call"><span class="ph-av big">LK</span><b>Lakshmi</b><small>Voice call · 02:14</small>
-                <div class="lp-call-btns"><i></i><i></i><i class="end"></i></div></div></div>
-              <div class="lp-slide"><div class="ph-top"><span class="ph-av grp">FM</span><div><b>Family</b><small>Amma, Appa, Sri, you</small></div></div>
-              <div class="ph-body">
-                <div class="pb in"><u>Amma</u>Lunch is ready 🍛</div>
-                <div class="pb in"><u>Sri</u>Coming in 10 min</div>
-                <div class="pb out">Save some for me!<i>1:05</i></div>
-                <div class="pb in"><u>Appa</u>🎤 Voice message · 0:12</div>
-              </div>
-              <div class="ph-in"><span>Message</span><em></em></div></div>
+          <div class="bx-pcard" aria-hidden="true">
+            <div class="bx-phone"><div class="lp-slides bx-slides" id="lp-slides">
+              <div class="lp-slide on"><img src="img/app/chats.jpg" alt=""></div>
+              <div class="lp-slide"><img src="img/app/chat.jpg" alt=""></div>
+              <div class="lp-slide"><img src="img/app/connect.jpg" alt=""></div>
+              <div class="lp-slide"><img src="img/app/contact.jpg" alt=""></div>
             </div></div>
           </div>
         </section>
 
-        <section class="lp-float" aria-label="What you can do">
-          <div class="lp-float-track">
-            <figure><div class="ph sm"><div class="ph-scr"><div class="ph-top"><span class="ph-av">RK</span><div><b>Ravi Kumar</b><small>online</small></div></div>
-              <div class="ph-body">
-                <div class="ph-day">Today</div>
-                <div class="pb in">Reached the station. Where are you?</div>
-                <div class="pb out">5 min, near the metro gate<i>10:42</i></div>
-                <div class="pb in">Ok. Sending the ticket</div>
-                <div class="pb in file"><span>PDF</span>train-ticket.pdf<small>182 KB</small></div>
-                <div class="pb out">Got it 👍<i>10:44</i></div>
-              </div>
-              <div class="ph-in"><span>Message</span><em></em></div></div></div><figcaption>Private chats</figcaption></figure>
-            <figure><div class="ph sm"><div class="ph-scr"><div class="lp-call"><span class="ph-av big">LK</span><b>Lakshmi</b><small>Voice call · 02:14</small>
-                <div class="lp-call-btns"><i></i><i></i><i class="end"></i></div></div></div></div><figcaption>Voice calls</figcaption></figure>
-            <figure><div class="ph sm"><div class="ph-scr"><div class="lp-video"><div class="lp-vid-main"><span class="ph-av big">SR</span></div><div class="lp-vid-pip"><span class="ph-av">ME</span></div>
-                <div class="lp-vid-tag">Video calls · coming soon</div><div class="lp-call-btns"><i></i><i></i><i class="end"></i></div></div></div></div><figcaption>Video calls <span class="lp-soon">Coming soon</span></figcaption></figure>
-            <figure><div class="ph sm"><div class="ph-scr"><div class="ph-top"><span class="ph-av grp">FM</span><div><b>Family</b><small>Amma, Appa, Sri, you</small></div></div>
-              <div class="ph-body">
-                <div class="pb in"><u>Amma</u>Lunch is ready 🍛</div>
-                <div class="pb in"><u>Sri</u>Coming in 10 min</div>
-                <div class="pb out">Save some for me!<i>1:05</i></div>
-                <div class="pb in"><u>Appa</u>🎤 Voice message · 0:12</div>
-              </div>
-              <div class="ph-in"><span>Message</span><em></em></div></div></div><figcaption>Group chats</figcaption></figure>
+        <section class="bx-grid" id="features">
+          <div class="bx-t bx-mint bx-w2"><div class="bx-ic">@</div><div><h3>Your @username is your number</h3><p>Share a name, not your SIM. Nobody can find you unless you want them to — they send a request, you accept.</p></div></div>
+          <div class="bx-t bx-ink"><div class="bx-ic">🔒</div><div><h3>End-to-end encrypted</h3><p>Only you and your friend can read it.</p></div></div>
+          <div class="bx-t bx-peach"><div class="bx-ic">📞</div><div><h3>Voice calls</h3><p>Clear and private. Video calls coming soon.</p></div></div>
+          <div class="bx-t bx-sky"><div class="bx-ic">👥</div><div><h3>Groups</h3><p>Admins, rules and descriptions.</p></div></div>
+          <div class="bx-t bx-green bx-w2 bx-row"><img src="img/app/chat.jpg" alt="A chat in BharatApp Chat" loading="lazy"><div><h3>BharatApp Chat never saves your history</h3><p>Messages are encrypted on your phone. Our server only passes them on and deletes each copy the moment it's delivered.</p></div></div>
+          <div class="bx-t bx-lilac"><div class="bx-ic">☁️</div><div><h3>Your backup, your Drive</h3><p>Encrypted to your own Google Drive — we can't read it, neither can Google.</p></div></div>
+          <div class="bx-t bx-cream bx-w2"><div class="bx-ic">✨</div><div><h3>Status that disappears</h3><p>Share a moment as text, photo or voice. It's gone after 24 hours.</p></div></div>
+          <div class="bx-t bx-mint bx-w2"><div class="bx-ic">💻</div><div><h3>Phone and browser, in sync</h3><p>Log in at bharatapp.chat with your @username and password — your chats follow you.</p></div></div>
+        </section>
+
+        <section class="bx-sec" id="know">
+          <h2 class="bx-h2">What we know about you</h2>
+          <p class="bx-sub">Short list, on purpose.</p>
+          <div class="bx-know">
+            <div><b>Your phone number</b><span>Never asked. Sign-up uses a username.</span></div>
+            <div><b>Your messages</b><span>Can't read them. Encrypted on your phone; removed from the server once delivered.</span></div>
+            <div><b>Your contacts list</b><span>Never uploaded. People connect by request.</span></div>
+            <div><b>Your Gmail</b><span>Used to verify you. Never shown to anyone.</span></div>
+            <div><b>Ads and tracking</b><span>None.</span></div>
           </div>
         </section>
 
-
-        <section class="lp-sec lp-two" id="know">
-          <div><h2 class="lp-h2">What we know about you</h2><p class="lp-sub">Short list, on purpose.</p></div>
-          <table class="lp-table">
-            <tr><td>Your phone number</td><td><b>Never asked.</b> Sign-up uses a username.</td></tr>
-            <tr><td>Your messages</td><td><b>Can't read them.</b> Encrypted on your phone; removed from the server once delivered.</td></tr>
-            <tr><td>Your contacts list</td><td><b>Never uploaded.</b> People connect by request.</td></tr>
-            <tr><td>Your Gmail</td><td>Used to verify you. Never shown to anyone.</td></tr>
-            <tr><td>Ads and tracking</td><td><b>None.</b></td></tr>
-          </table>
+        <section class="bx-sec" id="how">
+          <h2 class="bx-h2">Getting started takes a minute</h2>
+          <div class="bx-steps">
+            <div class="bx-t bx-peach"><div class="bx-num">1</div><div><h3>Pick a username</h3><p>Something like @lakshmi7 or @jenny21. That's what people use to find you.</p></div></div>
+            <div class="bx-t bx-mint"><div class="bx-num">2</div><div><h3>Share it, or your QR code</h3><p>They send a request; you accept. Strangers can't message you.</p></div></div>
+            <div class="bx-t bx-sky"><div class="bx-num">3</div><div><h3>Chat, call, share</h3><p>Text, voice notes, photos, files, groups and calls.</p></div></div>
+          </div>
         </section>
 
-        <section class="lp-sec lp-two" id="how">
-          <div><h2 class="lp-h2">Getting started takes a minute</h2></div>
-          <ol class="lp-steps">
-            <li><div><b>Pick a username</b><span>Something like @lakshmi7 or @jenny21. That is what people use to find you.</span></div></li>
-            <li><div><b>Share it, or your QR code</b><span>They send a request; you accept. Strangers can't message you.</span></div></li>
-            <li><div><b>Chat, call, share</b><span>Text, voice notes, photos, files, groups and calls — on your phone and in the browser.</span></div></li>
-          </ol>
+        <section class="bx-band">
+          <h2>Made in India. Made for you.</h2>
+          <p>Free to use. Private by default.</p>
+          <div><button class="bx-b1" onclick="landStart()">Create my BharatApp Chat ID</button><button class="bx-b2" onclick="landRestore()">Log in</button></div>
         </section>
-
 
         <footer class="lp-foot">
           <div class="lp-foot-cols">
