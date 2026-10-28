@@ -468,6 +468,8 @@ async function fetchPresence(c){
     else if(diff<7*86400){ const d=Math.floor(diff/86400); s='last seen '+d+' day'+(d>1?'s':'')+' ago'; }
     else s='last seen recently';
     const sub=$('chat-sub'); if(sub)sub.classList.toggle('online', s==='online');
+    // my waiting messages are red while they're offline, light green while online
+    const on=s==='online'; if(c._online!==on){ c._online=on; renderMsgs(false); }
     $('chat-sub-t').textContent=s;
   }catch(e){ $('chat-sub-t').textContent=''; }
 }
@@ -619,7 +621,9 @@ function msgHTML(m,c){
   const burnBar=m.burn&&m.revealed?`<div class="burn-bar"><i style="animation:burnbar ${BURN_VIEW_S}s linear forwards"></i></div>`:'';
   const reacts=reactionChips(m);
   // my bubbles: light red = not delivered yet, light green = delivered, green = read
-  const readCls=m.from!=='me'?'':m.status==='read'?' is-read':(m.status==='sent'||m.status==='failed')?' is-waiting':'';
+  const peerOnline=!!(curChat&&contact(curChat)?._online);
+  const readCls=m.from!=='me'?'':m.status==='read'?' is-read':m.status==='delivered'?'':
+    (m.status==='failed'||!peerOnline)?' is-waiting':'';
   return `<div class="brow ${side}"><div class="bub-wrap"><div class="bub${burnCls}${readCls}" data-mid="${m.id}">${inner}${burnBar}<div class="meta">${m.expireAt?'⌛ ':''}${fmtTime(m.ts)} ${ticks(m)}</div></div>${reacts}</div></div>`;
 }
 const BURN_VIEW_S=6;
