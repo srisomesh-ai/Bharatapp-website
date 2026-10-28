@@ -277,3 +277,5 @@ input,textarea,select{font-family:inherit;font-size:16px;color:var(--text)}
 .info-ph{width:72px;height:72px;object-fit:cover;border-radius:10px;flex:none}
 .info-act{cursor:pointer;justify-content:flex-start;font-weight:600}
 .info-act.red{color:#C0392B}
+/* support desk (admin panel): no sign-up or backup links on its log-in */
+body.desk .lg-link{display:none}

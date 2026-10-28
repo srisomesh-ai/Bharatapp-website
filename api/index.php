@@ -84,6 +84,7 @@ function register(PDO $pdo, array $in): void {
   if ($name === '' || mb_strlen($name) > 24 || !is_array($pubkey)) out(false, ['error' => 'bad_input']);
   // new usernames: 4–30 characters (3-letter names are held back for now)
   if (($why = usernameProblem($username)) !== '') out(false, ['error' => $why]);
+  if (reservedUsername($username)) out(false, ['error' => 'username_taken']);
   // Every new account is tied to a verified Gmail address. It is kept on the
   // server only — lookups, profiles and contacts never return it. A persona
   // made from an account that is already signed in takes that account's email.
@@ -125,6 +126,7 @@ function register(PDO $pdo, array $in): void {
         // this device just proved the Gmail: trust it for password-only sign-in
         $extra['trust'] = issueTrust($pdo, $kid);
       }
+      linkSupport($pdo, $kid);
       out(true, ['kal_id' => $kid, 'username' => $username, 'token' => $token] + $extra);
     } catch (PDOException $e) { /* duplicate id, retry */ }
   }
@@ -181,6 +183,7 @@ function send(PDO $pdo, array $in): void {
   }
   deliver($pdo, $to, $me['kal_id'], $cid, $iv, $blob);
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $to, $cid, $iv, $blob);
+  if ($to === supportId($pdo) && ($in['push'] ?? 'message') === 'message') emailSupportNotice($pdo, $me['kal_id']);
   logForward($pdo, $in, $me['kal_id']);
   // best-effort push (content stays private — generic text only)
   $sname = '';
@@ -583,6 +586,8 @@ function accountDelete(PDO $pdo, array $in): void {
   $kid = $me['kal_id'];
   $st = $pdo->prepare('SELECT username, email FROM k_users WHERE kal_id = ?');
   $st->execute([$kid]); $u = $st->fetch();
+  // the support account is removed from the admin panel, never by accident here
+  if ((string)$u['username'] === 'support') out(false, ['error' => 'support_account']);
   if (strtolower(trim((string)($in['confirm'] ?? ''), " @")) !== (string)$u['username']) {
     out(false, ['error' => 'confirm_mismatch']);
   }
@@ -845,6 +850,7 @@ function changeUsername(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
   $new = strtolower(trim((string)($in['username'] ?? ''), " @"));
   if (($why = usernameProblem($new)) !== '') out(false, ['error' => $why]);
+  if (reservedUsername($new)) out(false, ['error' => 'username_taken']);
   // rate limit: once per 30 days
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN username_changed_at DATETIME NULL"); } catch (Throwable $e) {}
   $st = $pdo->prepare('SELECT username, username_changed_at FROM k_users WHERE kal_id = ?');
@@ -868,6 +874,45 @@ function changeUsername(PDO $pdo, array $in): void {
  * (letters, numbers, _ ; up to 30). Letters-only names are kept for the
  * premium tier, numbers-only names aren't allowed. '' = fine.
  */
+/* BharatApp Chat Support: the official @support account. Every user is
+   connected to it; the admin answers its chats from the admin panel. */
+function supportId(PDO $pdo): string {
+  static $id = null;
+  if ($id !== null) return $id;
+  $st = $pdo->prepare('SELECT kal_id FROM k_users WHERE username = ? AND disabled = 0');
+  $st->execute(['support']);
+  return $id = (string)($st->fetchColumn() ?: '');
+}
+function linkSupport(PDO $pdo, string $kal): string {
+  $sup = supportId($pdo);
+  if ($sup === '' || $sup === $kal) return $sup;
+  $pdo->prepare("INSERT IGNORE INTO k_contacts (a,b,status,created_at) VALUES (?,?,'accepted',NOW())")
+      ->execute([$sup, $kal]);
+  return $sup;
+}
+/* Names people could mistake for us. */
+function reservedUsername(string $u): bool {
+  return (bool)preg_match('/support|bharatapp|official|admin|helpdesk|customercare/', $u);
+}
+/* A user wrote to support: tell the admin by email, at most once an hour per user. */
+function emailSupportNotice(PDO $pdo, string $fromKal): void {
+  try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS k_support_notice (kal_id VARCHAR(14) PRIMARY KEY, sent_at DATETIME NOT NULL) ENGINE=InnoDB");
+    $st = $pdo->prepare('SELECT 1 FROM k_support_notice WHERE kal_id = ? AND sent_at > (NOW() - INTERVAL 1 HOUR)');
+    $st->execute([$fromKal]);
+    if ($st->fetchColumn()) return;
+    $pdo->prepare('REPLACE INTO k_support_notice (kal_id, sent_at) VALUES (?, NOW())')->execute([$fromKal]);
+    $u = $pdo->prepare('SELECT username, name FROM k_users WHERE kal_id = ?'); $u->execute([$fromKal]);
+    $r = $u->fetch() ?: [];
+    $who = '@' . ($r['username'] ?? '?') . (empty($r['name']) ? '' : ' (' . str_replace(["\r", "\n"], ' ', $r['name']) . ')');
+    $to = defined('SUPPORT_TO') ? SUPPORT_TO : 'someswararao.pyle@gmail.com';
+    $from = 'support@bharatapp.chat';
+    $body = "$who sent a message to BharatApp Chat Support.\r\n\r\nOpen the admin panel → Support chats to reply.\r\n";
+    $headers = "From: BharatApp Chat Support <$from>\r\nContent-Type: text/plain; charset=utf-8\r\n";
+    @mail($to, 'New support chat from ' . $who, $body, $headers, '-f' . $from);
+  } catch (Throwable $e) {}
+}
+
 function usernameProblem(string $u): string {
   if (!preg_match('/^[a-z0-9_]{4,30}$/', $u)) return 'bad_username';
   $letters = preg_match_all('/[a-z]/', $u);
@@ -885,7 +930,7 @@ function usernameTaken(PDO $pdo, string $u): bool {
 /** Three free names close to what was asked for: its letters + a number. */
 function usernameSuggestions(PDO $pdo, string $u): array {
   $base = substr(preg_replace('/[^a-z]/', '', $u), 0, 20);
-  if ($base === '') $base = 'user';
+  if ($base === '' || reservedUsername($base)) $base = 'user';
   elseif (strlen($base) < 4) $base .= '_in';   // sri → sri_in27
   $out = [];
   for ($i = 0; $i < 40 && count($out) < 3; $i++) {
@@ -904,7 +949,7 @@ function checkUsername(PDO $pdo, array $in): void {
     out(true, ['available' => false, 'reason' => 'premium', 'suggestions' => usernameSuggestions($pdo, $u)]);
   }
   if ($why !== '') out(true, ['available' => false, 'reason' => 'rules', 'suggestions' => usernameSuggestions($pdo, $u)]);
-  if (usernameTaken($pdo, $u)) out(true, ['available' => false, 'reason' => 'taken', 'suggestions' => usernameSuggestions($pdo, $u)]);
+  if (reservedUsername($u) || usernameTaken($pdo, $u)) out(true, ['available' => false, 'reason' => 'taken', 'suggestions' => usernameSuggestions($pdo, $u)]);
   out(true, ['available' => true]);
 }
 
@@ -955,6 +1000,7 @@ function reqAct(PDO $pdo, array $in): void {
 }
 function contactsState(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
+  $support = linkSupport($pdo, $me['kal_id']);   // older accounts get it here
   $st = $pdo->prepare("SELECT a,b,status FROM k_contacts WHERE a=? OR b=?");
   $st->execute([$me['kal_id'],$me['kal_id']]);
   $accepted=[]; $pendingOut=[];
@@ -963,7 +1009,7 @@ function contactsState(PDO $pdo, array $in): void {
     if ($r['status']==='accepted') $accepted[]=$other;
     elseif ($r['a']===$me['kal_id']) $pendingOut[]=$other;
   }
-  out(true, ['accepted'=>$accepted, 'pending_out'=>$pendingOut]);
+  out(true, ['accepted'=>$accepted, 'pending_out'=>$pendingOut, 'support'=>$support]);
 }
 
 function fcmRegister(PDO $pdo, array $in): void {

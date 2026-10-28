@@ -11,6 +11,8 @@ async function refreshRequests(){
     _reqIn=r.requests||[];
     const st=await api('contacts_state',authBody());
     _acceptedKal=st.accepted||[]; _pendingOut=st.pending_out||[];
+    // BharatApp Chat Support is always in the chat list
+    if(st.support&&st.support!==me().kalId&&!D().contacts.some(c=>c.kalId===st.support)){ try{ await connectReal(st.support); }catch(e){} }
     updateReqBadge();
     // notify on a newly arrived request
     if(_reqIn.length>prevCount && prevCount>=0 && window._reqReady){

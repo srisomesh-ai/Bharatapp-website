@@ -37,6 +37,8 @@ try {
     case 'delete_user':  deleteUser($pdo, $in); break;
     case 'create_user':  createUser($pdo, $in); break;
     case 'slides':       adminSlides(); break;
+    case 'support':      $st = $pdo->query("SELECT kal_id FROM k_users WHERE username = 'support'");
+                         out(true, ['kal_id' => (string)($st->fetchColumn() ?: '')]); break;
     case 'slide_add':    slideAdd($in); break;
     case 'slide_del':    slideDel($in); break;
     case 'list_groups':  listGroups($pdo); break;
