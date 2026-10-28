@@ -759,11 +759,57 @@ function openMsgMenu(mid){
   const reactBar=`<div class="react-bar">${emojis.map(e=>`<button class="react-emoji" onclick='reactMsg("${mid}","${e}")'>${e}</button>`).join('')}</div>`;
   $('msgmenu-body').innerHTML=reactBar+`
     <div class="menu-it" onclick='closeSheets();window._reply("${mid}")'>↩ &nbsp;Reply</div>
+    ${m.burn?'':`<div class="menu-it" onclick='closeSheets();openForward("${mid}")'>↪ &nbsp;Forward</div>`}
     <div class="menu-it" onclick='closeSheets();openMsgInfo("${mid}")'>ℹ &nbsp;Message info</div>
     <div class="menu-it red" onclick='delMsg("${mid}",false)'>🗑 &nbsp;Delete for me</div>
     ${m.from==='me'?`<div class="menu-it red" onclick='delMsg("${mid}",true)'>💥 &nbsp;Delete for everyone</div>`:''}`;
   window._reply=id=>{const mm=ch.msgs.find(x=>x.id===id); if(mm)setReply(mm,c);};
   openSheet('sheet-msgmenu');
+}
+/* ---- forward: pick chats, send each one a copy. A fingerprint of the
+   content (never the content) goes with it, as in the app, so a forward
+   chain can be traced on a lawful order. ---- */
+let _fwd=null;
+function openForward(mid){
+  const m=chat(curChat).msgs.find(x=>x.id===mid); if(!m)return;
+  const list=D().contacts.filter(c=>c.id!==curChat&&(c.isGroup||(c.real&&!c.pending&&!(typeof isBlocked==='function'&&isBlocked(c.kalId)))))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  if(!list.length){ toast('No other chats to forward to'); return; }
+  _fwd={m,from:curChat,picked:new Set()};
+  $('fwd-list').innerHTML=list.map(c=>`<label class="fwd-it"><input type="checkbox" value="${c.id}" onchange="fwdPick(this)">${avatarHTML(c,'sm')}<span>${esc(c.name)}${c.username?` <small class="muted">@${esc(c.username)}</small>`:''}</span></label>`).join('');
+  $('fwd-go').disabled=true; $('fwd-go').textContent='Forward';
+  openSheet('sheet-forward');
+}
+function fwdPick(el){ el.checked?_fwd.picked.add(el.value):_fwd.picked.delete(el.value);
+  const n=_fwd.picked.size; $('fwd-go').disabled=!n; $('fwd-go').textContent=n>1?'Forward to '+n+' chats':'Forward'; }
+async function fwdHash(m){
+  const media=m.kind==='img'||m.kind==='voice'||m.kind==='file';
+  const content=media?(m.img||m.audio||m.file||''):String(m.text||'').trim().replace(/\s+/g,' ');
+  const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('kalisi-fwd-v1\n'+(media?'media':'text')+'\n'+content));
+  return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function doForward(){
+  if(!_fwd||!_fwd.picked.size)return;
+  const {m,from,picked}=_fwd; _fwd=null; closeSheets();
+  const src=contact(from);
+  const fwd={fwd_hash:await fwdHash(m)};
+  if(m.from!=='me'&&src&&!src.isGroup&&src.kalId)fwd.fwd_from=src.kalId;
+  let sent=0;
+  for(const id of picked){
+    const c=contact(id); if(!c)continue;
+    const part={kind:m.kind,text:m.text||'',img:m.img||null,audio:m.audio||null,file:m.file||null,
+      fileName:m.fileName||null,fileSize:m.fileSize||null,wave:m.wave||null,dur:m.dur||0};
+    if(c.isGroup&&m.kind==='file'){ part.kind='text'; part.text='📄 '+(m.fileName||'Document'); part.file=null; }
+    const nm={id:uid(),from:'me',ts:now(),status:c.isGroup?'sent':'sending',...part};
+    chat(id).msgs.push(nm); save();
+    try{
+      if(c.isGroup) await netSendGroup(c,nm,fwd);
+      else{ await netSend(c,nm,fwd); if(nm.status==='sending')nm.status='sent'; }
+      sent++;
+    }catch(e){ nm.status='failed'; }
+  }
+  save(); renderChats(); if(curChat)renderMsgs(false);
+  toast(sent>1?'Forwarded to '+sent+' chats':sent?'Forwarded':'Not sent — check your internet');
 }
 function reactMsg(mid,emoji){
   const ch=chat(curChat); const c=contact(curChat); const m=ch.msgs.find(x=>x.id===mid);
