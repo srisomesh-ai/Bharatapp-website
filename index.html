@@ -223,7 +223,45 @@
           <p class="ob-note" id="lg-msg"></p>
           <div class="lg-links">
             <button class="lg-link" onclick="landStart()">New here? Create an account</button>
+            <button class="lg-link" onclick="showForgot()">Forgot password?</button>
             <button class="lg-link" onclick="restorePick()">Restore from a backup file</button>
+          </div>
+        </div>
+      </div>
+      <div id="ob-forgot" class="hide">
+        <div class="lg-card">
+          <h1 class="ob-h1">Forgot <em>password?</em></h1>
+          <p class="lg-sub">Enter your @username and the Gmail you signed up with. We'll send a 6-digit code to set a new password.</p>
+          <form onsubmit="fpGo();return false" autocomplete="on">
+            <div class="field">
+              <label for="fp-user">Username</label>
+              <input id="fp-user" maxlength="31" placeholder="@username" autocomplete="username" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label for="fp-email">Gmail</label>
+              <input id="fp-email" type="email" maxlength="80" placeholder="you@gmail.com" autocomplete="email" autocapitalize="none">
+            </div>
+            <div id="fp-step2" class="hide">
+              <div class="lg-newdev">We sent a 6-digit code to your Gmail.</div>
+              <div class="field">
+                <label for="fp-code">Code from your Gmail</label>
+                <input id="fp-code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code" style="font-family:var(--mono);letter-spacing:.3em">
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label for="fp-pass">New password</label>
+                <input id="fp-pass" type="password" maxlength="100" placeholder="8+ characters" autocomplete="new-password">
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label for="fp-pass2">Confirm new password</label>
+                <input id="fp-pass2" type="password" maxlength="100" placeholder="Type it again" autocomplete="new-password">
+              </div>
+              <p class="ob-why" style="margin-top:12px">Your chats are locked with your password. After a reset, chats in an old backup can't be opened, and you'll be logged out on your other devices. New chats work as normal.</p>
+            </div>
+            <button class="btn hero-start" id="fp-go" type="submit" style="margin-top:16px">Send code</button>
+          </form>
+          <p class="ob-note" id="fp-msg"></p>
+          <div class="lg-links">
+            <button class="lg-link" onclick="showLogin()">Back to log in</button>
           </div>
         </div>
       </div>
@@ -441,10 +479,10 @@
 
 
 <script src="js/qrcode.js?v=2.9"></script>
-<script src="js/net.js?v=3.7"></script>
+<script src="js/net.js?v=3.8"></script>
 <script src="js/pwkey.js?v=2.9"></script>
 <script src="js/voice.js?v=2.9"></script>
-<script src="js/landing.js?v=3.9"></script>
+<script src="js/landing.js?v=4.0"></script>
 <script src="js/secure.js?v=2.9"></script>
 <script src="js/dialog.js?v=2.9"></script>
 <script src="js/notify.js?v=2.9"></script>

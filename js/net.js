@@ -42,7 +42,24 @@ async function sharedKey(myPrivJwk,theirPubJwk){
   return crypto.subtle.deriveKey({name:'ECDH',public:pub},priv,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
 }
 const _keyCache={};
+/* A contact who resets their password gets a new key. Check theirs now and
+   then (and when a message won't open) and switch to the new one. */
+async function refreshKey(c,force){
+  const now=Date.now(), f=force?'_pkForce':'_pkAt';
+  if(c[f]&&now-c[f]<(force?30000:120000))return false;
+  c[f]=now; c._pkAt=now;
+  try{
+    const {user}=await api('lookup',{handle:c.kalId});
+    if(!user?.pubkey?.x||(user.pubkey.x===c.pubkey?.x&&user.pubkey.y===c.pubkey?.y))return false;
+    const had=!!c.pubkey; c.pubkey=user.pubkey;
+    for(const k in _keyCache)if(k.endsWith(':'+c.kalId))delete _keyCache[k];
+    save();
+    if(had)toast((c.username?'@'+c.username:c.name)+' reset their password — security code updated');
+    return true;
+  }catch(e){ return false; }
+}
 async function keyFor(c){
+  if(c.kalId&&!c.isGroup)await refreshKey(c);
   const ck=S.active+':'+c.kalId;
   if(!_keyCache[ck])_keyCache[ck]=await sharedKey(me().priv,c.pubkey);
   return _keyCache[ck];
@@ -174,14 +191,8 @@ async function pollOnce(){
     let c=D().contacts.find(x=>x.kalId===pkt.from);
     if(!c){ try{ c=await connectReal(pkt.from); }catch(e){ continue; } }
     if(isBlocked&&isBlocked(pkt.from)){ continue; }
-    if(c._pkCheck===undefined){
-      try{ const {user}=await api('lookup',{handle:c.kalId});
-        c._pkCheck=JSON.stringify(user.pubkey)===JSON.stringify(c.pubkey);
-        if(!c._pkCheck){ c.idChanged=true; save();
-          kAlert({title:'⚠️ Key changed',message:'The encryption key for '+(c.username?'@'+c.username:c.name)+' has changed. This should never happen normally. Verify their identity in person before sharing anything sensitive.',okText:'Understood',danger:true}); }
-      }catch(e){}
-    }
-    let body; try{ body=await decryptFrom(c,pkt.iv,pkt.blob); }catch(e){ continue; }
+    let body; try{ body=await decryptFrom(c,pkt.iv,pkt.blob); }
+    catch(e){ if(!await refreshKey(c,true))continue; try{ body=await decryptFrom(c,pkt.iv,pkt.blob); }catch(e2){ continue; } }
     changed=true;
     if(body.kind==='read'){ // peer read my messages
       const ch=chat(c.id);

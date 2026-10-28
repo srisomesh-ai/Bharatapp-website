@@ -29,6 +29,7 @@ try {
     case 'login_otp_send':   loginOtpSend($pdo, $in); break;
     case 'login_otp_verify': loginOtpVerify($pdo, $in); break;
     case 'login_password': loginPassword($pdo, $in); break;
+    case 'password_reset': passwordReset($pdo, $in); break;
     case 'contact':  contactForm($pdo, $in); break;
     case 'slides':   listSlides(); break;
     case 'device_list':   deviceList($pdo, $in); break;
@@ -264,7 +265,7 @@ function contactsProfiles(PDO $pdo, array $in): void {
   $ph = implode(',', array_fill(0, count($ids), '?'));
   $rows = [];
   try {
-    $st = $pdo->prepare("SELECT kal_id, username, name, avatar FROM k_users WHERE kal_id IN ($ph)");
+    $st = $pdo->prepare("SELECT kal_id, username, name, avatar, pubkey FROM k_users WHERE kal_id IN ($ph)");
     $st->execute($ids);
     $rows = $st->fetchAll();
   } catch (Throwable $e) {
@@ -274,6 +275,8 @@ function contactsProfiles(PDO $pdo, array $in): void {
     $rows = $st->fetchAll();
   }
   foreach ($rows as &$r) {
+    // after a password reset the key changes; contacts pick up the new one here
+    if (isset($r['pubkey'])) $r['pubkey'] = json_decode((string)$r['pubkey'], true);
     if (isset($r['avatar']) && $r['kal_id'] !== $me['kal_id']
         && !allowedBy($pdo, $r['kal_id'], 'photo', $me['kal_id'])) $r['avatar'] = null;
   }
@@ -591,6 +594,36 @@ function loginPassword(PDO $pdo, array $in): void {
   checkEmailCode($pdo, $email, $code);
   $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$email]);
   out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')) + ['trust' => $newTrust()]);
+}
+
+/* Forgot password: @username + the account's Gmail + the emailed code (sent
+   by login_otp_send) set a new password. The account key comes from the
+   password, so the app sends the new public key, salt and verifier. Every
+   other device is signed out (it holds the old key), and messages still
+   waiting were locked to the old key, so they go too. Contacts pick up the
+   new key through contacts_profiles / lookup. */
+function passwordReset(PDO $pdo, array $in): void {
+  $r = loginAccount($pdo, $in);
+  $verifier = (string)($in['verifier'] ?? '');
+  $salt = (string)($in['salt'] ?? '');
+  $pubkey = $in['pubkey'] ?? null;
+  if ($verifier === '' || $salt === '' || strlen($verifier) > 128 || strlen($salt) > 128
+      || !is_array($pubkey) || empty($pubkey['x']) || empty($pubkey['y'])) {
+    out(false, ['error' => 'bad_input']);
+  }
+  checkEmailCode($pdo, $r['_email'], trim((string)($in['code'] ?? '')));
+  $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$r['_email']]);
+  unset($pubkey['d']);
+  $kid = $r['kal_id'];
+  $pdo->prepare('UPDATE k_users SET pubkey = ?, verifier = ?, salt = ?, key_username = ?, token = ? WHERE kal_id = ?')
+      ->execute([json_encode($pubkey), password_hash($verifier, PASSWORD_DEFAULT), $salt,
+                 $r['username'], bin2hex(random_bytes(24)), $kid]);
+  foreach (['DELETE FROM k_queue WHERE to_id = ?', 'DELETE FROM k_devices WHERE kal_id = ?',
+            'DELETE FROM k_trusted WHERE kal_id = ?', 'DELETE FROM k_fcm WHERE kal_id = ?'] as $sql) {
+    try { $pdo->prepare($sql)->execute([$kid]); } catch (Throwable $e) {}
+  }
+  $r['pubkey'] = json_encode($pubkey); $r['salt'] = $salt; $r['verifier'] = 'x';
+  out(true, newDeviceSession($pdo, $r, (string)($in['device'] ?? '')) + ['trust' => issueTrust($pdo, $kid)]);
 }
 
 /* Delete my account and everything the server holds for it. The user types

@@ -95,7 +95,7 @@ function landStart(fromHistory){
   $('scr-onboard').classList.add('on');
   $('ob-step1').classList.remove('hide');
   $('ob-step2').classList.add('hide');
-  $('ob-login').classList.add('hide');
+  $('ob-login').classList.add('hide'); $('ob-forgot').classList.add('hide');
   setTimeout(()=>$('ob-name')?.focus(),200);
 }
 
@@ -143,7 +143,7 @@ function showLogin(fromHistory){
   document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
   $('scr-onboard').classList.add('on');
   $('ob-step1').classList.add('hide'); $('ob-step2').classList.add('hide');
-  $('ob-login').classList.remove('hide');
+  $('ob-login').classList.remove('hide'); $('ob-forgot').classList.add('hide');
   $('lg-step2').classList.add('hide'); $('lg-code').value=''; lgMsg('');
   setTimeout(()=>$('lg-user')?.focus(),200);
 }
@@ -202,6 +202,47 @@ async function lgLogin(){
     $('lg-pass').value=''; $('lg-code').value=''; $('lg-step2').classList.add('hide');
     loadContactsAfterLogin().then(()=>{ if(typeof renderAll==='function')renderAll(); });
   }catch(e){ lgMsg(LOGIN_ERR[e.message]||'Could not log in — check your internet'); }
+  finally{ go.disabled=false; }
+}
+/* ---- forgot password: @username + Gmail → code → new password. The key
+   comes from the password, so a new one is made; other devices sign out. ---- */
+function showForgot(){
+  $('ob-login').classList.add('hide'); $('ob-forgot').classList.remove('hide');
+  $('fp-user').value=$('lg-user').value; $('fp-step2').classList.add('hide');
+  $('fp-go').textContent='Send code'; fpMsg('');
+  setTimeout(()=>($('fp-user').value?$('fp-email'):$('fp-user')).focus(),200);
+}
+function fpMsg(t){ $('fp-msg').textContent=t||''; }
+const FP_ERR={no_match:"That @username and Gmail don't match an account",bad_email:'Enter the Gmail of your account',
+  bad_username:'Enter your @username',...LOGIN_ERR,code_expired:'Code expired — clear the code and tap Send code again'};
+async function fpGo(){
+  const u=($('fp-user').value||'').trim().replace(/^@/,'').toLowerCase(), email=($('fp-email').value||'').trim().toLowerCase();
+  if(!/^[a-z0-9_]{3,30}$/.test(u)){fpMsg('Enter your @username');return;}
+  if(!email.includes('@')){fpMsg('Enter the Gmail of your account');return;}
+  const step2=!$('fp-step2').classList.contains('hide'), code=($('fp-code').value||'').trim();
+  const go=$('fp-go'); go.disabled=true;
+  try{
+    if(!step2||!code){
+      fpMsg('Sending…');
+      await api('login_otp_send',{username:u,email});
+      $('fp-step2').classList.remove('hide'); go.textContent='Set new password';
+      fpMsg(''); $('fp-code').focus(); return;
+    }
+    const pass=$('fp-pass').value;
+    if(!/^\d{6}$/.test(code)){fpMsg('Enter the 6-digit code from your Gmail');return;}
+    if(pass.length<8){fpMsg('Use 8 or more characters for the new password');return;}
+    if(pass!==$('fp-pass2').value){fpMsg('The two passwords are different');return;}
+    fpMsg('Setting your new password…');
+    const salt=newSalt(), keys=await keyFromPassword(u,pass,salt), verifier=await verifierFor(u,pass,salt);
+    const dev=(navigator.userAgentData?.platform||navigator.platform||'Browser')+' · web';
+    const r=await api('password_reset',{username:u,email,code,verifier,salt,pubkey:keys.pub,device:dev});
+    if(r.trust)_setTrust(u,r.trust);
+    const ident=seedIdentity(r.name||u,{kalId:r.kal_id,username:r.username,token:r.token,pub:keys.pub,priv:keys.priv});
+    ident.device=true; save();
+    fpMsg(''); showApp(); toast('Password changed — you\'re logged in');
+    for(const id of ['fp-code','fp-pass','fp-pass2'])$(id).value='';
+    loadContactsAfterLogin().then(()=>{ if(typeof renderAll==='function')renderAll(); });
+  }catch(e){ fpMsg(FP_ERR[e.message]||'Something went wrong — check your internet'); }
   finally{ go.disabled=false; }
 }
 /* bring in everyone this account is connected with, so the chat list isn't empty */
