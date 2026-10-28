@@ -116,6 +116,7 @@ tbody tr:hover td{background:#FFFBF4}
       <button class="tabb" id="tab-trace" onclick="showTab('trace')">Trace forward</button>
       <button class="tabb" id="tab-slides" onclick="showTab('slides')">Screenshots</button>
       <button class="tabb" id="tab-support" onclick="showTab('support')">Support chats</button>
+      <button class="tabb" id="tab-rtc" onclick="showTab('rtc')">Call relay</button>
     </div>
 
     <div id="view-users">
@@ -166,6 +167,15 @@ tbody tr:hover td{background:#FFFBF4}
       <div id="sup-desk" style="display:none">
         <p class="muted" style="margin:4px 0 10px">Chats people send to <b>@support</b>. Sign in once with the support password; this browser stays signed in. You also get an email when someone writes in. <a href="/?desk=1" target="_blank" rel="noopener">Open in a new tab ↗</a></p>
         <iframe id="sup-frame" title="Support chats" style="width:100%;height:78vh;border:1px solid var(--line);border-radius:18px;background:#fff"></iframe>
+      </div>
+    </div>
+    <div id="view-rtc" style="display:none">
+      <div class="newuser">
+        <p><b>Call relay</b> — makes calls connect on every mobile network. It runs on the VPS (the ScanPlay server) as its own small service, capped so ScanPlay stays fast.</p>
+        <p id="rtc-state" class="muted">Loading…</p>
+        <p class="muted" style="margin-top:10px">To install or update: open hPanel → VPS → <b>Browser terminal</b>, paste this line and press Enter. Keep it private — it carries the relay's secret.</p>
+        <textarea id="rtc-line" rows="3" readonly style="width:100%;font-family:var(--mono);font-size:12.5px"></textarea>
+        <button class="btn sm" style="margin-top:8px" onclick="navigator.clipboard.writeText($('rtc-line').value).then(()=>toast('Copied'))">Copy line</button>
       </div>
     </div>
     <div id="view-trace" style="display:none">
@@ -345,9 +355,16 @@ function seen(u){
 function showTab(t){
   if(t==='slides')loadSlides();
   if(t==='support')loadSupport();
-  for(const k of ['users','groups','trace','slides','support']){
+  if(t==='rtc')loadRtc();
+  for(const k of ['users','groups','trace','slides','support','rtc']){
     $('tab-'+k).classList.toggle('on',t===k); $('view-'+k).style.display=t===k?'block':'none';
   }
+}
+async function loadRtc(){
+  try{ const r=await call('rtc',{}); $('rtc-line').value=r.line;
+    $('rtc-state').innerHTML=r.host?`<span class="pill on">Set up</span> &nbsp;Relay at <b>${esc(r.host)}</b> · last set up ${esc(r.seen||'')}`
+      :'<span class="pill off">Not set up</span> &nbsp;Calls use direct connections only until the line below is run on the VPS.';
+  }catch(e){ toast(e.message); }
 }
 async function doTrace(){
   const v=$('trace-in').value; if(!v.trim()){toast('Paste the text or fingerprint');return;}
