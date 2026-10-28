@@ -38,7 +38,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Newsreader:opsz,wght@6..72,500&family=Noto+Serif+Devanagari:wght@600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=3.8">
+<link rel="stylesheet" href="css/app.css?v=3.9">
 <link rel="stylesheet" href="css/landing-voice.css?v=3.0">
 <link rel="stylesheet" href="css/landing.css?v=19">
 <link rel="stylesheet" href="css/features.css?v=3.0">
@@ -435,6 +435,12 @@
     <div class="grab"></div>
     <div id="msgmenu-body"></div>
   </div>
+  <div class="sheet" id="sheet-forward">
+    <div class="grab"></div>
+    <h2>Forward to</h2>
+    <div id="fwd-list" class="fwd-list"></div>
+    <button class="btn hero-start" id="fwd-go" style="margin-top:12px" onclick="doForward()" disabled>Forward</button>
+  </div>
 
   <div class="sheet" id="sheet-timer">
     <div class="grab"></div>
@@ -479,7 +485,7 @@
 
 
 <script src="js/qrcode.js?v=2.9"></script>
-<script src="js/net.js?v=3.8"></script>
+<script src="js/net.js?v=3.9"></script>
 <script src="js/pwkey.js?v=2.9"></script>
 <script src="js/voice.js?v=2.9"></script>
 <script src="js/landing.js?v=4.0"></script>
@@ -490,8 +496,8 @@
 <script src="js/settings.js?v=3.8"></script>
 <script src="js/block.js?v=2.9"></script>
 <script src="js/status.js?v=2.9"></script>
-<script src="js/groups.js?v=2.9"></script>
-<script src="js/app.js?v=4.1"></script>
+<script src="js/groups.js?v=3.0"></script>
+<script src="js/app.js?v=4.2"></script>
 <script src="js/site.js?v=2"></script>
 <script>document.getElementById('lp-year').textContent=new Date().getFullYear()</script>
 </body>

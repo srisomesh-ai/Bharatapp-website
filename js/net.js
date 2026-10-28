@@ -94,11 +94,11 @@ async function connectReal(handle){
 }
 
 /* ---- outgoing ---- */
-async function netSend(c,m){
+async function netSend(c,m,fwd){
   const body={kind:m.kind,text:m.text,img:m.img||null,audio:m.audio||null,file:m.file||null,fileName:m.fileName||null,fileSize:m.fileSize||null,
     wave:m.wave||null,dur:m.dur||0,burn:!!m.burn,replyTo:m.replyTo||null,cid:m.id,ts:m.ts,timer:chat(c.id).timer||0};
   const enc=await encryptFor(c,body);
-  await api('send',{...authBody(),to:c.kalId,client_id:m.id,...enc,echo:1});
+  await api('send',{...authBody(),to:c.kalId,client_id:m.id,...enc,echo:1,...(fwd||{})});
 }
 /* typing / live typing: only reaches them while they're online, no notification */
 async function netSendLive(c,obj){

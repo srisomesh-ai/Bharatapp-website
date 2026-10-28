@@ -39,13 +39,13 @@ async function createGroup(){
 }
 
 // group send: encrypt per member is heavy; server-relayed simple = one shared blob via group_send
-async function netSendGroup(g,m){
+async function netSendGroup(g,m,fwd){
   // For simple relay groups we encrypt with a per-group symmetric key stored locally and shared at creation.
   // v1 simplification: send base64 JSON blob (transport still HTTPS); flagged for E2E upgrade later.
   const body={kind:m.kind,text:m.text,img:m.img||null,audio:m.audio||null,wave:m.wave||null,dur:m.dur||0,
               cid:m.id,ts:m.ts,gid:g.kalId,gname:g.name,fromName:me().name,fromKal:me().kalId};
   const blob=btoa(unescape(encodeURIComponent(JSON.stringify(body))));
-  await api('group_send',{...authBody(),gid:g.kalId,iv:'grp',blob,client_id:m.id});
+  await api('group_send',{...authBody(),gid:g.kalId,iv:'grp',blob,client_id:m.id,...(fwd||{})});
 }
 
 function groupMsgLabel(g){ return g.members?`${g.members.length} members`:'Group'; }

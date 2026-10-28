@@ -283,3 +283,10 @@ body.desk .lg-link{display:none}
 .brow.mine .bub.is-read{background:#BCEBCF}
 [data-theme="dark"] .brow.mine .bub.is-waiting{background:#4A2626}
 [data-theme="dark"] .brow.mine .bub.is-read{background:#1E5A3C}
+/* forward picker */
+.fwd-list{max-height:52vh;overflow-y:auto;margin-top:8px}
+.fwd-it{display:flex;align-items:center;gap:12px;padding:9px 4px;border-radius:12px;cursor:pointer}
+.fwd-it:hover{background:rgba(128,128,128,.08)}
+.fwd-it input{width:18px;height:18px;accent-color:var(--gold,#0E7A4F);flex:none}
+.fwd-it .avatar{width:38px;height:38px;font-size:14px;flex:none}
+.fwd-it small{font-size:12px}
