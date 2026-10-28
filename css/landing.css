@@ -268,3 +268,20 @@
 #scr-landing .bx-hcard .lp-status{position:relative;z-index:1;color:#4A2E14}
 #scr-landing .bx-hcard .lp-status.bad{color:#6E1206;font-weight:700}
 #scr-landing .bx-hcard .lp-status.ok{color:#04381F;font-weight:700}
+
+/* App store buttons (not live yet: "Coming soon") */
+.stores{display:flex;flex-wrap:wrap;gap:10px}
+.store{position:relative;display:inline-flex;align-items:center;gap:10px;background:#0B0B0B;color:#fff;border:1px solid #3A3A3A;border-radius:12px;padding:8px 16px 8px 12px;min-width:168px;cursor:default;user-select:none}
+.store .st-ic{width:26px;height:26px;flex:none}
+.store .st-t{display:flex;flex-direction:column;line-height:1.05}
+.store .st-t small{font:500 10.5px Inter,system-ui,sans-serif;letter-spacing:.02em;opacity:.9}
+.store .st-t b{font:600 18px Inter,system-ui,sans-serif;letter-spacing:-.2px}
+.store .st-soon{position:absolute;top:-9px;right:-6px;font:700 10.5px Inter,system-ui,sans-serif;font-style:normal;background:#FFB000;color:#2A1A00;border-radius:999px;padding:2px 8px;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+#scr-landing .bx-stores{position:relative;z-index:1;margin-top:16px}
+@media (max-width:440px){
+  .stores{gap:8px}
+  .store{min-width:0;flex:1 1 0;padding:7px 10px 7px 9px;gap:7px}
+  .store .st-ic{width:22px;height:22px}
+  .store .st-t small{font-size:9.5px}
+  .store .st-t b{font-size:15px}
+}
