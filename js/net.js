@@ -121,7 +121,8 @@ async function retryFailed(){
   }finally{ _retrying=false; }
 }
 async function netSendCtl(c,obj){ // control messages: read receipts, burn acks — also encrypted
-  const enc=await encryptFor(c,obj);
+  if(!c||c.isGroup||!c.pubkey)return;   // groups get no read receipts
+  let enc; try{ enc=await encryptFor(c,obj); }catch(e){ return; }
   await api('send',{...authBody(),to:c.kalId,client_id:'ctl'+uid(),push:'none',...enc}).catch(()=>{});
 }
 
@@ -188,12 +189,18 @@ async function pollOnce(){
       }catch(e){}
       changed=true; continue;
     }
-    let c=D().contacts.find(x=>x.kalId===pkt.from);
-    if(!c){ try{ c=await connectReal(pkt.from); }catch(e){ continue; } }
     if(isBlocked&&isBlocked(pkt.from)){ continue; }
+    // encrypted group message: opens with one of my group keys
+    const gm=await tryGroupDecrypt(pkt);
+    if(gm){ const [g,o]=gm; handleGroupIncoming({...o,gid:g.kalId,fromKal:pkt.from}); changed=true; continue; }
+    let c=D().contacts.find(x=>x.kalId===pkt.from&&!x.isGroup);
+    if(!c){ try{ c=await connectReal(pkt.from); }catch(e){ continue; } }
     let body; try{ body=await decryptFrom(c,pkt.iv,pkt.blob); }
-    catch(e){ if(!await refreshKey(c,true))continue; try{ body=await decryptFrom(c,pkt.iv,pkt.blob); }catch(e2){ continue; } }
+    catch(e){ if(!await refreshKey(c,true)){ askGroupKeys(c); continue; }
+      try{ body=await decryptFrom(c,pkt.iv,pkt.blob); }catch(e2){ continue; } }
     changed=true;
+    if(body.kind==='gkey'){ onGroupKey(c,body); continue; }
+    if(body.kind==='gkey-request'){ await onGroupKeyRequest(c); continue; }
     if(body.kind==='read'){ // peer read my messages
       const ch=chat(c.id);
       for(const id of body.ids||[]){ const m=ch.msgs.find(x=>x.id===id); if(m)m.status='read'; }
@@ -255,7 +262,19 @@ async function pollOnce(){
 
 /* ---- a message I sent from another of my devices ---- */
 async function handleMyEcho(pkt){
-  if(pkt.from!==me().kalId||!/^KAL-/.test(pkt.to))return false;   // app groups use their own scheme
+  if(pkt.from!==me().kalId)return false;
+  // my group message, sent from my phone or another browser
+  const g=D().contacts.find(x=>x.isGroup&&x.kalId===pkt.to);
+  if(g){
+    if(!g.gkey)return false;
+    let o; try{ o=await gDecrypt(g.gkey,pkt.iv,pkt.blob); }catch(e){ return false; }
+    const ch=chat(g.id); if(ch.msgs.some(x=>x.id===o.cid))return false;
+    ch.msgs.push({id:o.cid||uid(),from:'me',kind:o.kind||'text',text:o.text||'',img:o.img||null,audio:o.audio||null,
+      file:o.file||null,fileName:o.fileName||null,fileSize:o.fileSize||null,wave:o.wave||null,dur:o.dur||0,ts:o.ts||pkt.ts,status:'sent'});
+    ch.msgs.sort((a,b)=>a.ts-b.ts);
+    return true;
+  }
+  if(!/^KAL-/.test(pkt.to))return false;
   let c=D().contacts.find(x=>x.kalId===pkt.to);
   if(!c){ try{ c=await connectReal(pkt.to); }catch(e){ return false; } }
   // same shared key both ways: my key + their public key
@@ -285,8 +304,10 @@ function handleGroupIncoming(gb){
     if(!g.members.includes(gb.fromKal))g.members.push(gb.fromKal); }
   const ch=chat(g.id);
   if(ch.msgs.some(x=>x.id===gb.cid))return; // dedup
-  const m={id:gb.cid||uid(),from:'them',senderName:gb.fromName||'',kind:gb.kind,text:gb.text||'',
-           img:gb.img||null,audio:gb.audio||null,wave:gb.wave||null,dur:gb.dur||0,
+  if(!['text','img','voice','file'].includes(gb.kind||'text'))return;
+  const m={id:gb.cid||uid(),from:'them',senderName:gb.fromName||'',kind:gb.kind||'text',text:gb.text||'',
+           img:gb.img||null,audio:gb.audio||null,file:gb.file||null,fileName:gb.fileName||null,fileSize:gb.fileSize||null,
+           wave:gb.wave||null,dur:gb.dur||0,
            ts:gb.ts||now(),status:'read'};
   ch.msgs.push(m);
   if(curChat!==g.id){ ch.unread=(ch.unread||0)+1; if(typeof notifyIncoming==='function')notifyIncoming(g,m); }
