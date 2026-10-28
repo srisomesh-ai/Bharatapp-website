@@ -851,15 +851,13 @@ function changeUsername(PDO $pdo, array $in): void {
   $new = strtolower(trim((string)($in['username'] ?? ''), " @"));
   if (($why = usernameProblem($new)) !== '') out(false, ['error' => $why]);
   if (reservedUsername($new)) out(false, ['error' => 'username_taken']);
-  // rate limit: once per 30 days
+  // A username can be changed once, and only after the account is 30 days old.
   try { $pdo->exec("ALTER TABLE k_users ADD COLUMN username_changed_at DATETIME NULL"); } catch (Throwable $e) {}
-  $st = $pdo->prepare('SELECT username, username_changed_at FROM k_users WHERE kal_id = ?');
+  $st = $pdo->prepare('SELECT username, username_changed_at, TIMESTAMPDIFF(DAY, created_at, NOW()) AS age_days FROM k_users WHERE kal_id = ?');
   $st->execute([$me['kal_id']]); $u = $st->fetch();
   if ($u['username'] === $new) out(false, ['error' => 'same_username']);
-  if (!empty($u['username_changed_at']) && strtotime($u['username_changed_at']) > time() - 30*86400) {
-    $days = ceil((strtotime($u['username_changed_at']) + 30*86400 - time()) / 86400);
-    out(false, ['error' => 'too_soon', 'days' => $days]);
-  }
+  if (!empty($u['username_changed_at'])) out(false, ['error' => 'username_locked']);
+  if ((int)$u['age_days'] < 30) out(false, ['error' => 'too_soon', 'days' => 30 - (int)$u['age_days']]);
   $st = $pdo->prepare('SELECT 1 FROM k_users WHERE username = ? AND kal_id <> ?');
   $st->execute([$new, $me['kal_id']]);
   if ($st->fetch()) out(false, ['error' => 'username_taken']);
@@ -869,11 +867,6 @@ function changeUsername(PDO $pdo, array $in): void {
   out(true, ['username' => $new]);
 }
 
-/**
- * Rules for a new free @username: 4+ letters and at least one number
- * (letters, numbers, _ ; up to 30). Letters-only names are kept for the
- * premium tier, numbers-only names aren't allowed. '' = fine.
- */
 /* BharatApp Chat Support: the official @support account. Every user is
    connected to it; the admin answers its chats from the admin panel. */
 function supportId(PDO $pdo): string {
@@ -913,6 +906,11 @@ function emailSupportNotice(PDO $pdo, string $fromKal): void {
   } catch (Throwable $e) {}
 }
 
+/**
+ * Rules for a new free @username: 4+ letters and at least one number
+ * (letters, numbers, _ ; up to 30). Letters-only names are kept for the
+ * premium tier, numbers-only names aren't allowed. '' = fine.
+ */
 function usernameProblem(string $u): string {
   if (!preg_match('/^[a-z0-9_]{4,30}$/', $u)) return 'bad_username';
   $letters = preg_match_all('/[a-z]/', $u);
@@ -1441,8 +1439,11 @@ function statusFeed(PDO $pdo, array $in): void {
   $ids = array_values(array_unique(array_filter($ids, fn($x)=>preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', (string)$x))));
   if (!$ids) out(true, ['status' => []]);
   $ph = implode(',', array_fill(0, count($ids), '?'));
+  // age is worked out by the database itself: the database clock and PHP's
+  // clock can be in different time zones, which made new updates look hours old
+  // (or "just now" for a whole day)
   $st = $pdo->prepare("SELECT s.id, s.kal_id, s.type, s.payload, s.created_at, u.username, u.name,
-                       s.allow_share,
+                       s.allow_share, TIMESTAMPDIFF(SECOND, s.created_at, NOW()) AS age,
                        (SELECT COUNT(*) FROM k_status_views v WHERE v.status_id=s.id) AS views
                        FROM k_status s JOIN k_users u ON u.kal_id = s.kal_id
                        WHERE s.kal_id IN ($ph) AND s.created_at > (NOW() - INTERVAL 24 HOUR)
@@ -1465,7 +1466,7 @@ function statusFeed(PDO $pdo, array $in): void {
   $all = array_values(array_filter($st->fetchAll(), fn($r) => $ok[$r['kal_id']] ?? false));
   $rows = array_map(fn($r)=>[
     'id'=>(int)$r['id'],'kal_id'=>$r['kal_id'],'username'=>$r['username'],'name'=>$r['name'],
-    'type'=>$r['type'],'payload'=>$r['payload'],'ts'=>strtotime($r['created_at'])*1000,
+    'type'=>$r['type'],'payload'=>$r['payload'],'ts'=>(time() - (int)$r['age'])*1000,
     'views'=>(int)$r['views'],'allow_share'=>(int)($r['allow_share']??0)
   ], $all);
   out(true, ['status' => $rows]);

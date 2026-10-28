@@ -11,7 +11,7 @@ function openSettings(){
       <button class="icon-btn" onclick="editName()" aria-label="Edit name">✏️</button>
     </div>
     <div class="pcard">
-      <div class="menu-it" onclick="changeUsernameUI()">＠ &nbsp;Change username <span class="muted" style="margin-left:auto;font-weight:400">once per 30 days</span></div>
+      <div class="menu-it" onclick="changeUsernameUI()">＠ &nbsp;Change username <span class="muted" style="margin-left:auto;font-weight:400">once, after 30 days</span></div>
     </div>
 
     <h3>Appearance</h3>
@@ -81,7 +81,7 @@ function flipToggle(id){
 
 async function changeUsernameUI(){
   const cur=me().username||'';
-  const nn=await kPrompt({title:'Change username',message:'4 or more letters and at least 1 number (letters, numbers, _). You can change this once every 30 days.',value:cur,placeholder:'username',okText:'Change'});
+  const nn=await kPrompt({title:'Change username',message:'4 or more letters and at least 1 number (letters, numbers, _). You can change it only once, 30 days after you joined.',value:cur,placeholder:'username',okText:'Change'});
   if(!nn)return;
   const clean=nn.trim().replace(/^@/,'').toLowerCase();
   if(!/^[a-z0-9_]{5,30}$/.test(clean)||(clean.match(/[a-z]/g)||[]).length<4||!/[0-9]/.test(clean)){ toast('Use 4 or more letters and at least 1 number'); return; }
@@ -93,7 +93,8 @@ async function changeUsernameUI(){
     toast('Username changed to @'+r.username+' ✅');
     openSettings(); renderAll();
   }catch(e){
-    const msg={too_soon:'You changed it recently — try again in '+(e.days||'a few')+' days',
+    const msg={too_soon:'New accounts can change their username after 30 days — '+(e.days||'a few')+' days to go',
+      username_locked:'You have already changed your username once — it can\'t be changed again',
       username_taken:'@'+clean+' is unavailable', bad_username:'Use 4 or more letters and at least 1 number',
       premium_username:'Letters-only names are for BharatApp Premium — add a number',
       same_username:'That is already your username'}[e.message]||'Could not change username';
