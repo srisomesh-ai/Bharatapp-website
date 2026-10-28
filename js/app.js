@@ -618,7 +618,8 @@ function msgHTML(m,c){
   const burnCls=m.burn?' burnable':'';
   const burnBar=m.burn&&m.revealed?`<div class="burn-bar"><i style="animation:burnbar ${BURN_VIEW_S}s linear forwards"></i></div>`:'';
   const reacts=reactionChips(m);
-  const readCls=m.from==='me'&&m.status==='read'?' is-read':'';
+  // my bubbles: light red = not delivered yet, light green = delivered, green = read
+  const readCls=m.from!=='me'?'':m.status==='read'?' is-read':(m.status==='sent'||m.status==='failed')?' is-waiting':'';
   return `<div class="brow ${side}"><div class="bub-wrap"><div class="bub${burnCls}${readCls}" data-mid="${m.id}">${inner}${burnBar}<div class="meta">${m.expireAt?'⌛ ':''}${fmtTime(m.ts)} ${ticks(m)}</div></div>${reacts}</div></div>`;
 }
 const BURN_VIEW_S=6;

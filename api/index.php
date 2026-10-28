@@ -267,7 +267,8 @@ function contactsProfiles(PDO $pdo, array $in): void {
     $rows = $st->fetchAll();
   }
   foreach ($rows as &$r) {
-    if (isset($r['avatar']) && !allowedBy($pdo, $r['kal_id'], 'photo', $me['kal_id'])) $r['avatar'] = null;
+    if (isset($r['avatar']) && $r['kal_id'] !== $me['kal_id']
+        && !allowedBy($pdo, $r['kal_id'], 'photo', $me['kal_id'])) $r['avatar'] = null;
   }
   unset($r);
   out(true, ['users' => $rows]);
@@ -506,7 +507,15 @@ function newDeviceSession(PDO $pdo, array $r, string $device): array {
     'pubkey'       => json_decode($r['pubkey'], true),
     'salt'         => (string)($r['salt'] ?? ''),
     'has_password' => !empty($r['verifier']),
+    'avatar'       => ownAvatar($pdo, $r['kal_id']),   // so a new phone shows my own photo
   ];
+}
+function ownAvatar(PDO $pdo, string $kal): ?string {
+  try {
+    $st = $pdo->prepare('SELECT avatar FROM k_users WHERE kal_id = ?');
+    $st->execute([$kal]);
+    return ($st->fetchColumn() ?: null);
+  } catch (Throwable $e) { return null; }
 }
 
 /**
@@ -1382,11 +1391,14 @@ function statusPost(PDO $pdo, array $in): void {
   }
   $allowShare = !empty($in['allow_share']) ? 1 : 0;
   try { $pdo->exec("ALTER TABLE k_status ADD COLUMN allow_share TINYINT NOT NULL DEFAULT 0"); } catch (Throwable $e) {}
-  $pdo->prepare('INSERT INTO k_status (kal_id, type, payload, allow_share, created_at) VALUES (?,?,?,?,NOW())')
-      ->execute([$me['kal_id'], $type, $payload, $allowShare]);
-  // keep only last 24h per user, removing any stored files first
+  statusMigrate($pdo);
+  // the poster picks how long it stays up: 1 hour to 3 days (24 hours if not said)
+  $ttl = max(60, min(4320, (int)($in['ttl_minutes'] ?? 1440)));
+  $pdo->prepare('INSERT INTO k_status (kal_id, type, payload, allow_share, created_at, expires_at) VALUES (?,?,?,?,NOW(), NOW() + INTERVAL ? MINUTE)')
+      ->execute([$me['kal_id'], $type, $payload, $allowShare, $ttl]);
+  // drop expired updates, removing any stored files first
   pruneStatusFiles($pdo);
-  $pdo->prepare('DELETE FROM k_status WHERE created_at < (NOW() - INTERVAL 24 HOUR)')->execute();
+  $pdo->prepare('DELETE FROM k_status WHERE COALESCE(expires_at, created_at + INTERVAL 24 HOUR) < NOW()')->execute();
   out(true, ['posted' => true]);
 }
 /* Write a base64 data URL to disk under api/media/status and return
@@ -1418,10 +1430,15 @@ function storeStatusFile(string $dataUrl, string $type): ?string {
 }
 
 /* Delete stored files for statuses that have expired. */
+/* Each status has its own expiry (older rows: 24 hours after posting). */
+function statusMigrate(PDO $pdo): void {
+  try { $pdo->exec("ALTER TABLE k_status ADD COLUMN expires_at DATETIME NULL"); } catch (Throwable $e) {}
+}
+
 function pruneStatusFiles(PDO $pdo): void {
   try {
     $st = $pdo->query("SELECT payload FROM k_status
-                       WHERE created_at < (NOW() - INTERVAL 24 HOUR)
+                       WHERE COALESCE(expires_at, created_at + INTERVAL 24 HOUR) < NOW()
                          AND payload LIKE 'file:%'");
     foreach ($st->fetchAll() as $r) {
       $name = basename((string)$r['payload']);
@@ -1433,6 +1450,7 @@ function pruneStatusFiles(PDO $pdo): void {
 
 function statusFeed(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
+  statusMigrate($pdo);
   $ids = $in['contacts'] ?? [];   // list of KAL-IDs the user follows (their contacts)
   if (!is_array($ids)) $ids = [];
   $ids[] = $me['kal_id'];
@@ -1444,9 +1462,10 @@ function statusFeed(PDO $pdo, array $in): void {
   // (or "just now" for a whole day)
   $st = $pdo->prepare("SELECT s.id, s.kal_id, s.type, s.payload, s.created_at, u.username, u.name,
                        s.allow_share, TIMESTAMPDIFF(SECOND, s.created_at, NOW()) AS age,
+                       TIMESTAMPDIFF(SECOND, NOW(), COALESCE(s.expires_at, s.created_at + INTERVAL 24 HOUR)) AS left_s,
                        (SELECT COUNT(*) FROM k_status_views v WHERE v.status_id=s.id) AS views
                        FROM k_status s JOIN k_users u ON u.kal_id = s.kal_id
-                       WHERE s.kal_id IN ($ph) AND s.created_at > (NOW() - INTERVAL 24 HOUR)
+                       WHERE s.kal_id IN ($ph) AND COALESCE(s.expires_at, s.created_at + INTERVAL 24 HOUR) > NOW()
                        ORDER BY s.created_at DESC LIMIT 200");
   $st->execute($ids);
   // Only people who are actually connected, and whose status privacy lets
@@ -1467,6 +1486,7 @@ function statusFeed(PDO $pdo, array $in): void {
   $rows = array_map(fn($r)=>[
     'id'=>(int)$r['id'],'kal_id'=>$r['kal_id'],'username'=>$r['username'],'name'=>$r['name'],
     'type'=>$r['type'],'payload'=>$r['payload'],'ts'=>(time() - (int)$r['age'])*1000,
+    'expires'=>(time() + (int)$r['left_s'])*1000,
     'views'=>(int)$r['views'],'allow_share'=>(int)($r['allow_share']??0)
   ], $all);
   out(true, ['status' => $rows]);
