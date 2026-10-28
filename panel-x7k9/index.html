@@ -3,77 +3,92 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#0D1120">
+<meta name="theme-color" content="#FFFBF4">
 <meta name="robots" content="noindex,nofollow">
 <title>BharatApp Chat Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0D1120;--panel:#161C30;--panel2:#1E2540;--line:#28304F;--text:#EDEEF4;--muted:#8A91AB;--faint:#5A6180;--gold:#F5A83C;--ember:#E4573F;--ok:#59C98D;--disp:'Bricolage Grotesque',system-ui,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace}
+:root{--bg:#FFFBF4;--panel:#fff;--panel2:#FFF4E6;--line:#EFE4D3;--text:#1B1712;--muted:#6E6253;--faint:#9A8C7A;--gold:#FF8A3D;--green:#0E7A4F;--ember:#D2402A;--ok:#0E7A4F;--disp:'Bricolage Grotesque',system-ui,sans-serif;--mono:ui-monospace,Menlo,Consolas,monospace;--shadow:0 1px 2px rgba(27,23,18,.04),0 8px 24px rgba(27,23,18,.05)}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#070A14;color:var(--text);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.5}
-.wrap{max-width:1100px;margin:0 auto;padding:20px}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:20px}
 button{font-family:inherit;cursor:pointer}
-input{font-family:inherit;font-size:15px}
+input,textarea{font-family:inherit;font-size:15px;color:var(--text)}
+a{color:var(--green)}
 /* login */
-#login{max-width:380px;margin:12vh auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px}
-.logo{display:flex;align-items:center;gap:10px;font-family:var(--disp);font-weight:800;font-size:22px;margin-bottom:6px}
-.logo svg{flex:none}
-.sub{color:var(--muted);font-size:13.5px;margin-bottom:20px}
-label{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px}
-input[type=text],input[type=password],input[type=search]{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;color:var(--text)}
-input:focus{outline:none;border-color:var(--gold)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--gold);color:#20160A;font-weight:700;border:none;border-radius:11px;padding:12px 18px;font-size:15px}
+#login{max-width:400px;margin:10vh auto;background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:32px;box-shadow:var(--shadow)}
+.brand{display:flex;align-items:center;gap:12px}
+.brand img{height:44px;display:block}
+.brand .tag{font-family:var(--disp);font-weight:800;font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--green);background:#E9F7EF;padding:4px 10px;border-radius:999px}
+#login .brand{flex-direction:column;align-items:flex-start;gap:14px;margin-bottom:8px}
+.sub{color:var(--muted);font-size:14px;margin-bottom:18px}
+label{display:block;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px}
+input[type=text],input[type=password],input[type=search],.nu-grid input,textarea{width:100%;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px}
+input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,138,61,.15)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--text);color:#fff;font-weight:700;border:none;border-radius:999px;padding:12px 20px;font-size:15px}
+.btn:hover{opacity:.92}
 .btn:active{transform:scale(.98)}
-.btn.sm{padding:7px 12px;font-size:13px;border-radius:9px}
-.btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
-.btn.red{background:transparent;color:var(--ember);border:1px solid rgba(228,87,63,.4)}
-.btn.amber{background:transparent;color:var(--gold);border:1px solid rgba(245,168,60,.4)}
+.btn:disabled{opacity:.5}
+.btn.sm{padding:7px 13px;font-size:13px}
+.btn.ghost{background:#fff;color:var(--text);border:1.5px solid var(--line)}
+.btn.red{background:#fff;color:var(--ember);border:1.5px solid rgba(210,64,42,.35)}
+.btn.amber{background:#fff;color:#B4560F;border:1.5px solid rgba(255,138,61,.45)}
 .err{color:var(--ember);font-size:13px;margin-top:12px;min-height:18px}
 /* app */
 #panel{display:none}
-.top{display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap}
-.top .logo{font-size:20px;flex:1}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
-.stat .n{font-family:var(--disp);font-weight:800;font-size:28px}
-.stat .l{color:var(--muted);font-size:12.5px;margin-top:2px}
+.top{display:flex;align-items:center;gap:10px;margin-bottom:22px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:12px 16px;box-shadow:var(--shadow)}
+.top .brand{flex:1;min-width:200px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 18px;box-shadow:var(--shadow)}
+.stat .n{font-family:var(--disp);font-weight:800;font-size:30px;line-height:1.1;display:flex;align-items:center;gap:8px}
+.stat .l{color:var(--muted);font-size:13px;margin-top:4px;font-weight:600}
+.stat.hl{background:#0E7A4F;border-color:#0E7A4F;color:#fff}.stat.hl .l{color:#CDEFDD}
+.stat.or{background:linear-gradient(135deg,#FFB35C,#FF8A3D);border-color:#FF9F43}.stat.or .l{color:#3A2410}
+.dot{width:10px;height:10px;border-radius:50%;background:#2BC46D;display:inline-block;flex:none}
+.stat.hl .dot{box-shadow:0 0 0 4px rgba(43,196,109,.3)}
+.dot.off{background:#C9BBA8}
+.qbox{background:var(--panel2);border:1px solid #F6DDBE;border-radius:18px;padding:14px 18px;margin-bottom:22px;font-size:13.5px;color:#4A4036}
+.qbox b{font-family:var(--disp)}
+.qrow{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:8px}
+.qrow span{background:#fff;border:1px solid #F6DDBE;border-radius:999px;padding:4px 12px}
 .toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.newuser{border:1px solid rgba(128,128,128,.25);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+.newuser{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px 18px;margin-bottom:14px}
 .newuser summary{cursor:pointer;font-weight:700}
+.newuser p{margin:8px 0}
 .nu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:10px 0}
 #nu-out{margin-top:8px}
 .slides{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}
 .slides figure{margin:0;display:grid;gap:6px;justify-items:center}
-.slides img{width:140px;border-radius:14px;border:1px solid rgba(128,128,128,.3)}
+.slides img{width:140px;border-radius:14px;border:1px solid var(--line)}
 .toolbar input{flex:1;min-width:200px}
-.tabs{display:flex;gap:8px;margin-bottom:16px}
-.tabb{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 15px;color:var(--muted);font-weight:600;font-size:14px}
-.tabb.on{background:var(--panel2);color:var(--gold);border-color:var(--gold)}
-table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:14px;overflow:hidden}
-th,td{text-align:left;padding:12px 14px;font-size:13.5px;border-bottom:1px solid var(--line)}
-th{color:var(--faint);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.tabs{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:2px}
+.tabb{background:#fff;border:1.5px solid var(--line);border-radius:999px;padding:8px 16px;color:var(--muted);font-weight:650;font-size:14px;white-space:nowrap}
+.tabb.on{background:var(--text);color:#fff;border-color:var(--text)}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
+th,td{text-align:left;padding:12px 14px;font-size:13.5px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{color:var(--faint);font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:#FFFDF9}
 tr:last-child td{border-bottom:none}
-.uname{font-weight:650}
+tbody tr:hover td{background:#FFFBF4}
+.uname{font-weight:700}
 .uid{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
-.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
-.pill.on{color:var(--ok);background:rgba(89,201,141,.12)}
-.pill.off{color:var(--ember);background:rgba(228,87,63,.12)}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+.pill.on{color:var(--green);background:#E9F7EF}
+.pill.off{color:var(--ember);background:#FDECE8}
+.seen{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;color:var(--muted)}
+.seen.live{color:var(--green);font-weight:700}
 .acts{display:flex;gap:6px;flex-wrap:wrap}
 .muted{color:var(--muted)}
 .empty{padding:40px;text-align:center;color:var(--faint)}
-#toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,14px);background:#242C4C;border:1px solid var(--line);padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;transition:.2s;pointer-events:none}
+#toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,14px);background:var(--text);color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;font-weight:600;opacity:0;transition:.2s;pointer-events:none}
 #toast.on{opacity:1;transform:translate(-50%,0)}
-@media(max-width:640px){.hide-sm{display:none}th,td{padding:10px 8px;font-size:12.5px}}
+@media(max-width:640px){.wrap{padding:12px}.hide-sm{display:none}th,td{padding:10px 8px;font-size:12.5px}.brand img{height:34px}.stat .n{font-size:24px}.top{border-radius:16px}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <!-- LOGIN -->
   <div id="login">
-    <div class="logo">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="11" rx="3" fill="#F5A83C"/><path d="M7 10V7a5 5 0 0 1 10 0v3" stroke="#F5A83C" stroke-width="2.4"/><circle cx="12" cy="15.5" r="1.8" fill="#0D1120"/></svg>
-      BharatApp Chat Admin
-    </div>
+    <div class="brand"><img src="../icons/bharatapp-logo.png" alt="BharatApp Chat"><span class="tag">Admin</span></div>
     <div class="sub">Restricted area — operator access only.</div>
     <label>Username</label>
     <input type="text" id="a-user" autocomplete="username" autocapitalize="none">
@@ -86,16 +101,14 @@ tr:last-child td{border-bottom:none}
   <!-- PANEL -->
   <div id="panel">
     <div class="top">
-      <div class="logo">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="11" rx="3" fill="#F5A83C"/><path d="M7 10V7a5 5 0 0 1 10 0v3" stroke="#F5A83C" stroke-width="2.4"/><circle cx="12" cy="15.5" r="1.8" fill="#0D1120"/></svg>
-        BharatApp Chat Admin
-      </div>
+      <div class="brand"><img src="../icons/bharatapp-logo.png" alt="BharatApp Chat"><span class="tag">Admin</span></div>
       <button class="btn ghost sm" onclick="loadAll()">↻ Refresh</button>
       <button class="btn amber sm" onclick="doWipe()">⚠ Wipe all data</button>
       <button class="btn red sm" onclick="doLogout()">Log out</button>
     </div>
 
     <div class="stats" id="stats"></div>
+    <div class="qbox" id="qbox" style="display:none"></div>
 
     <div class="tabs">
       <button class="tabb on" id="tab-users" onclick="showTab('users')">Users</button>
@@ -122,7 +135,7 @@ tr:last-child td{border-bottom:none}
         <input type="search" id="search" placeholder="Search @username, name, KAL-ID or email…" oninput="renderUsers()">
       </div>
       <table>
-        <thead><tr><th>User</th><th class="hide-sm">KAL-ID</th><th>Status</th><th class="hide-sm">Last seen</th><th>Actions</th></tr></thead>
+        <thead><tr><th>User</th><th class="hide-sm">KAL-ID</th><th>Status</th><th>Last online</th><th>Actions</th></tr></thead>
         <tbody id="users-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
@@ -152,12 +165,12 @@ tr:last-child td{border-bottom:none}
       </div>
       <div id="sup-desk" style="display:none">
         <p class="muted" style="margin:4px 0 10px">Chats people send to <b>@support</b>. Sign in once with the support password; this browser stays signed in. You also get an email when someone writes in. <a href="/?desk=1" target="_blank" rel="noopener">Open in a new tab ↗</a></p>
-        <iframe id="sup-frame" title="Support chats" style="width:100%;height:78vh;border:1px solid #E4E1D8;border-radius:14px;background:#fff"></iframe>
+        <iframe id="sup-frame" title="Support chats" style="width:100%;height:78vh;border:1px solid var(--line);border-radius:18px;background:#fff"></iframe>
       </div>
     </div>
     <div id="view-trace" style="display:none">
       <p class="muted" style="margin:4px 0 10px">Use only on a lawful order. Paste the exact forwarded text, or its 64-character fingerprint. BharatApp Chat never sees message content — only fingerprints of forwarded messages are kept.</p>
-      <textarea id="trace-in" rows="4" style="width:100%;box-sizing:border-box;border-radius:11px;padding:10px;font:inherit" placeholder="Forwarded message text or fingerprint"></textarea>
+      <textarea id="trace-in" rows="4"  placeholder="Forwarded message text or fingerprint"></textarea>
       <button class="btn" style="margin:10px 0" onclick="doTrace()">Find originator</button>
       <div id="trace-out"></div>
     </div>
@@ -206,11 +219,7 @@ function enterPanel(){ $('login').style.display='none'; $('panel').style.display
 
 async function loadAll(){
   try{
-    const s=await call('stats',{});
-    const st=s.stats;
-    $('stats').innerHTML=[
-      ['Total users',st.users],['Active (7d)',st.active7d],['Disabled',st.disabled],['Queued msgs',st.queued],['Groups',st.groups]
-    ].map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+    renderStats((await call('stats',{})).stats);
     const u=await call('list_users',{}); USERS=u.users; renderUsers();
     const g=await call('list_groups',{}); GROUPS=g.groups; renderGroups();
   }catch(e){ toast(e.message); }
@@ -227,7 +236,7 @@ function renderUsers(){
       <td><div class="uname">${u.username?'@'+esc(u.username):'<span class="muted">(no username)</span>'}</div><div class="muted">${esc(u.name)}</div>${u.email?`<div class="muted">${esc(u.email)}</div>`:''}</td>
       <td class="hide-sm uid">${esc(u.kal_id)}</td>
       <td>${u.disabled?'<span class="pill off">Disabled</span>':'<span class="pill on">Active</span>'}</td>
-      <td class="hide-sm muted">${fmt(u.last_seen)}</td>
+      <td>${seen(u)}</td>
       <td><div class="acts">
         ${u.disabled
           ? `<button class="btn sm amber" onclick="setDisabled('${u.kal_id}',0)">Enable</button>`
@@ -312,9 +321,27 @@ async function delSlide(name){
   if(!confirm('Remove this screenshot?'))return;
   try{ await call('slide_del',{name}); loadSlides(); }catch(e){ toast(e.message); }
 }
-async function loadStatsOnly(){ try{ const s=await call('stats',{}); const st=s.stats;
-  $('stats').innerHTML=[['Total users',st.users],['Active (7d)',st.active7d],['Disabled',st.disabled],['Queued msgs',st.queued],['Groups',st.groups]]
-    .map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join(''); }catch(e){} }
+async function loadStatsOnly(){ try{ renderStats((await call('stats',{})).stats); }catch(e){} }
+function renderStats(st){
+  const n=v=>Number(v||0).toLocaleString('en-IN');
+  $('stats').innerHTML=[
+    ['Online now',st.online,'hl','<span class="dot"></span>'],['Offline',st.offline,'','<span class="dot off"></span>'],
+    ['Active today',st.today,'or'],['Total users',st.users],['Active (7 days)',st.active7d],
+    ['Disabled',st.disabled],['Groups',st.groups],['Waiting to deliver',st.queued]
+  ].map(([l,v,c,i])=>`<div class="stat ${c||''}"><div class="n">${i||''}${n(v)}</div><div class="l">${l}</div></div>`).join('');
+  const q=st.queue;
+  $('qbox').style.display=q?'block':'none';
+  if(q)$('qbox').innerHTML=`<b>Waiting to deliver: ${n(st.queued)}</b> — encrypted copies (messages, read ticks and call signals) held for a phone or browser that hasn't come online yet. Each signed-in device gets its own copy, and copies are deleted the moment they're delivered, or after 30 days.
+    <div class="qrow"><span>Last hour: <b>${n(q.hour)}</b></span><span>1 h – 7 days: <b>${n(q.week)}</b></span><span>Older than 7 days: <b>${n(q.older)}</b></span><span>For <b>${n(q.people)}</b> people</span><span>For devices idle 7+ days: <b>${n(q.idle_devices)}</b></span></div>`;
+}
+function seen(u){
+  const a=u.seen_ago==null?null:Number(u.seen_ago);
+  if(a==null||!u.last_seen)return '<span class="seen">Never</span>';
+  if(a<120)return '<span class="seen live"><span class="dot"></span>Online</span>';
+  const m=a/60,h=m/60,d=h/24;
+  const t=m<60?Math.floor(m)+' min ago':h<24?Math.floor(h)+' h ago':d<30?Math.floor(d)+' d ago':new Date(u.last_seen.replace(' ','T')).toLocaleDateString('en-IN');
+  return `<span class="seen" title="${esc(u.last_seen)}"><span class="dot off"></span>${t}</span>`;
+}
 function showTab(t){
   if(t==='slides')loadSlides();
   if(t==='support')loadSupport();

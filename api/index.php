@@ -168,6 +168,9 @@ function send(PDO $pdo, array $in): void {
   if (!$st->fetch()) out(false, ['error' => 'recipient_not_found']);
   $st = $pdo->prepare('SELECT 1 FROM k_blocks WHERE blocker = ? AND blocked = ?'); $st->execute([$to, $me['kal_id']]);
   if ($st->fetch()) { out(true, ['queued' => true]); } // silently drop (blocked)
+  // BharatApp Chat Support takes chats only, no calls
+  if (str_starts_with((string)($in['push'] ?? ''), 'call')
+      && ($to === supportId($pdo) || $me['kal_id'] === supportId($pdo))) out(false, ['error' => 'calls_off']);
   // contact-request gate: must be accepted in either direction (groups bypass via gid handled in group_send)
   $st = $pdo->prepare("SELECT status FROM k_contacts WHERE (a=? AND b=?) OR (a=? AND b=?) LIMIT 1");
   $st->execute([$me['kal_id'],$to,$to,$me['kal_id']]);
@@ -208,6 +211,10 @@ function send(PDO $pdo, array $in): void {
 
 function fetchMsgs(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
+  // undelivered copies are kept at most 30 days (Privacy Policy); tidy now and then
+  if (random_int(1, 200) === 1) {
+    try { $pdo->exec("DELETE FROM k_queue WHERE created_at < (NOW() - INTERVAL 30 DAY)"); } catch (Throwable $e) {}
+  }
   if ($me['dev'] !== '') deviceIds($pdo, $me['kal_id']);   // drops copies no main login will ever fetch
   $out = ['messages' => [], 'receipts' => []];
 
