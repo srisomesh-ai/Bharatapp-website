@@ -68,6 +68,8 @@ try {
     case 'status_react':   statusReact($pdo, $in); break;
     case 'status_reactions': statusReactions($pdo, $in); break;
     case 'ping':      out(true, ['pong' => time()]); break;
+    case 'ice':       iceServers($pdo, $in); break;
+    case 'rtc_hello': rtcHello($pdo, $in); break;
     case 'push_check': pushCheck($pdo, $in); break;
     case 'push_test':  pushTest($pdo, $in); break;
     default:          out(false, ['error' => 'unknown_action']);
@@ -1726,6 +1728,56 @@ function groupSend(PDO $pdo, array $in): void {
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $gid, $cid, $iv, $blob);
   logForward($pdo, $in, $me['kal_id']);
   out(true, ['sent' => true, 'gid' => $gid]);
+}
+
+/* ---------------- call relay (TURN) ----------------
+   Calls connect phone to phone; on mobile networks that can't (shared
+   addresses), the voice goes through our relay on the VPS (coturn, rtc/setup.sh).
+   Media stays end-to-end encrypted (DTLS-SRTP) - the relay only forwards it.
+   Each call gets a password that works for 12 hours (coturn "use-auth-secret":
+   username = expiry:kal_id, password = HMAC-SHA1 of it with the shared secret). */
+function setting(PDO $pdo, string $k, ?string $set = null): ?string {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_settings (k VARCHAR(40) PRIMARY KEY, v TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  if ($set !== null) {
+    $pdo->prepare('INSERT INTO k_settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)')->execute([$k, $set]);
+    return $set;
+  }
+  $st = $pdo->prepare('SELECT v FROM k_settings WHERE k = ?'); $st->execute([$k]);
+  $v = $st->fetchColumn();
+  return $v === false ? null : $v;
+}
+function rtcSecret(PDO $pdo): string {
+  return setting($pdo, 'rtc_secret') ?? setting($pdo, 'rtc_secret', bin2hex(random_bytes(32)));
+}
+function iceServers(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $list = [['urls' => ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478']]];
+  $host = setting($pdo, 'rtc_host');
+  $ttl = 12 * 3600;
+  if ($host) {
+    $user = (time() + $ttl) . ':' . $me['kal_id'];
+    $list[] = [
+      'urls' => ["turn:$host:3478?transport=udp", "turn:$host:3478?transport=tcp"],
+      'username' => $user,
+      'credential' => base64_encode(hash_hmac('sha1', $user, rtcSecret($pdo), true)),
+    ];
+  }
+  out(true, ['ice' => $list, 'ttl' => $ttl]);
+}
+/* The setup script on the VPS reports its address, signed with the secret,
+   so nothing has to be typed into the admin panel. */
+function rtcHello(PDO $pdo, array $in): void {
+  $host = strtolower(trim((string)($in['host'] ?? '')));
+  $ts = (int)($in['ts'] ?? 0);
+  $sig = (string)($in['sig'] ?? '');
+  $okHost = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)
+         || preg_match('/^(?=.{4,253}$)([a-z0-9-]{1,63}\.)+[a-z]{2,}$/', $host);
+  if (!$okHost || abs(time() - $ts) > 600) out(false, ['error' => 'bad_input']);
+  $secret = setting($pdo, 'rtc_secret');
+  if (!$secret || !hash_equals(hash_hmac('sha256', "$host|$ts", $secret), $sig)) out(false, ['error' => 'bad_signature']);
+  setting($pdo, 'rtc_host', $host);
+  setting($pdo, 'rtc_seen', date('Y-m-d H:i:s'));
+  out(true, ['host' => $host]);
 }
 
 /* ---------------- helpers ---------------- */

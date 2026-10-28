@@ -42,6 +42,7 @@ try {
     case 'slide_add':    slideAdd($in); break;
     case 'slide_del':    slideDel($in); break;
     case 'list_groups':  listGroups($pdo); break;
+    case 'rtc':          adminRtc($pdo); break;
     case 'trace':        traceForward($pdo, $in); break;
     case 'wipe_all':     wipeAll($pdo); break;
     case 'logout':       $pdo->prepare('DELETE FROM k_admin_sessions WHERE token = ?')->execute([$in['token'] ?? '']); out(true, ['bye'=>1]); break;
@@ -274,6 +275,20 @@ function traceForward(PDO $pdo, array $in): void {
       : ['kal_id'=>$f['kal_id'],'username'=>$f['username'],'email'=>$f['email']];
   }
   out(true, ['hash'=>$hash, 'origin'=>$origin, 'forwards'=>$rows]);
+}
+
+/* Call relay: the secret the VPS setup line carries, and what the VPS last reported. */
+function adminRtc(PDO $pdo): void {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_settings (k VARCHAR(40) PRIMARY KEY, v TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  $get = function (string $k) use ($pdo) { $st = $pdo->prepare('SELECT v FROM k_settings WHERE k = ?'); $st->execute([$k]); $v = $st->fetchColumn(); return $v === false ? null : $v; };
+  $secret = $get('rtc_secret');
+  if (!$secret) {
+    $secret = bin2hex(random_bytes(32));
+    $pdo->prepare('INSERT IGNORE INTO k_settings (k, v) VALUES (?, ?)')->execute(['rtc_secret', $secret]);
+    $secret = $get('rtc_secret');
+  }
+  out(true, ['line' => 'curl -fsSL https://bharatapp.chat/rtc/setup.sh | SECRET=' . $secret . ' bash',
+             'host' => $get('rtc_host'), 'seen' => $get('rtc_seen')]);
 }
 
 function out(bool $ok, array $data = []): void { echo json_encode(['ok' => $ok] + $data); exit; }
