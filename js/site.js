@@ -22,6 +22,7 @@
       '<div><img src="/icons/bharatapp-logo.png" alt="BharatApp Chat" style="height:40px"><p style="margin:10px 0 0;max-width:22em">A private messenger made in India. Your @username is your number.</p></div>'+
       '<div><h4>Product</h4><a href="/features.html">Features</a><a href="/how-it-works.html">How it works</a><a href="/security.html">Security</a><a href="/download.html">Download</a></div>'+
       '<div><h4>Company</h4><a href="/about.html">About us</a><a href="/indian-messaging-app.html">Made in India</a><a href="/help.html">Help &amp; contact</a></div>'+
+      '<div><h4>Learn</h4><a href="/chat-without-phone-number.html">Chat without a phone number</a><a href="/view-once-messages.html">View-once messages</a><a href="/whatsapp-alternative-india.html">WhatsApp alternative</a></div>'+
       '<div><h4>Legal</h4><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms of Use</a><a href="/delete-account.html">Delete your account</a></div>'+
       '</div><div class="love"><span>Made with <b>❤</b> in India</span>'+
       '<span>© '+year+' BharatApp Chat Media Private Limited. All rights reserved.</span></div></footer></div>';
