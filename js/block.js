@@ -6,14 +6,14 @@ async function blockContact(cid){
   S.blocked=S.blocked||[];
   if(!S.blocked.includes(c.kalId))S.blocked.push(c.kalId);
   save();
-  if(c.real&&me().token){ try{ await api('block',{...authBody(),kal_id:c.kalId}); }catch(e){} }
+  if(c.real&&me().token){ try{ await api('block',{...authBody(),target:c.kalId}); }catch(e){} }
   toast(handleOf(c)+' blocked');
   closeSheets(); if(curChat===cid)closeChat(); renderChats();
 }
 async function unblockContact(kalId){
   S.blocked=(S.blocked||[]).filter(x=>x!==kalId);
   save();
-  if(me().token){ try{ await api('unblock',{...authBody(),kal_id:kalId}); }catch(e){} }
+  if(me().token){ try{ await api('unblock',{...authBody(),target:kalId}); }catch(e){} }
   toast('Unblocked');
   renderBlockedList();
 }

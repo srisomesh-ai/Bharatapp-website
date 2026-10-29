@@ -107,6 +107,7 @@ async function netSendLive(c,obj){
 }
 /* messages that couldn't be sent (offline) go out on the next poll */
 let _retrying=false;
+const _inflight=new Set();   // ids being sent right now (never saved)
 async function retryFailed(){
   if(_retrying||!S||!S.data)return; _retrying=true;
   try{
@@ -114,8 +115,14 @@ async function retryFailed(){
       if(!c.real||c.isGroup)continue;
       for(const m of (chat(c.id).msgs||[])){
         if(m.from!=='me'||(m.status!=='failed'&&m.status!=='sending'))continue;
+        if(_inflight.has(m.id))continue;                         // its first send is still uploading
         if(m.status==='sending'&&now()-m.ts<15000)continue;   // still on its way
-        try{ await netSend(c,m); m.status='sent'; save(); if(curChat===c.id)renderMsgs(false); }catch(e){ m.status='failed'; break; }
+        if((m._tries||0)>=8&&now()-(m._lastTry||0)<60000)continue;   // back off after many tries
+        _inflight.add(m.id); m._tries=(m._tries||0)+1; m._lastTry=now();
+        let ok=false;
+        try{ await netSend(c,m); ok=true; }catch(e){ m.status='failed'; }
+        finally{ _inflight.delete(m.id); }
+        if(ok){ m.status='sent'; save(); if(curChat===c.id)renderMsgs(false); } else break;
       }
     }
   }finally{ _retrying=false; }
@@ -174,14 +181,18 @@ async function restoreFile(input){
   }catch(e){ toast('Wrong passphrase or corrupted file'); }
 }
 
+let _polling=false, _pollAgain=false;
 async function pollOnce(){
   if(!me()?.token)return;
+  // one fetch at a time (a slow one with photos must not overlap the next)
+  if(_polling){ _pollAgain=true; return; }
+  _polling=true;
+  try{ do{ _pollAgain=false; await pollOnceRun(); }while(_pollAgain); }
+  finally{ _polling=false; }
+}
+async function pollOnceRun(){
   let res; try{ res=await api('fetch',authBody()); }catch(e){ return; }
   let changed=false;
-  for(const r of res.receipts){ // relay deleted its copy of my sent message
-    for(const cid in D().chats){ const m=D().chats[cid].msgs.find(x=>x.id===r.client_id);
-      if(m){ if(m.status==='sent'||m.status==='sending'||m.status==='failed')m.status='delivered'; if(r.receipt)m.receipt=r.receipt.slice(0,16); changed=true; } }
-  }
   for(const pkt of res.messages){
     // something I sent from my phone / another browser — show it here too
     if(pkt.to){ if(await handleMyEcho(pkt))changed=true; continue; }
@@ -212,17 +223,17 @@ async function pollOnce(){
     }
     if(body.kind==='burned'){ // peer viewed my burn message
       const ch=chat(c.id); const m=ch.msgs.find(x=>x.id===body.id);
-      if(m){ m.status='read'; m.burned=true; m.text=''; m.img=null; }
+      if(m){ m.status='read'; m.burned=true; m.text=''; m.img=null; m.file=null; m.audio=null; }
       continue;
     }
     if(body.kind==='delete'){ // peer deleted a message for everyone
-      const ch=chat(c.id); const i=ch.msgs.findIndex(x=>x.id===body.id);
+      const ch=chat(c.id); const i=ch.msgs.findIndex(x=>x.id===body.id&&x.from==='them');   // only their own messages
       if(i>=0){ ch.msgs.splice(i,1); }
       continue;
     }
     if(body.kind==='react'){ // peer reacted to a message
       const ch=chat(c.id); const m=ch.msgs.find(x=>x.id===body.id);
-      if(m){ m.reactions=m.reactions||{}; if(body.emoji)m.reactions.them=body.emoji; else delete m.reactions.them; }
+      if(m){ m.reactions=m.reactions||{}; const e=safeEmoji(body.emoji); if(e)m.reactions.them=e; else delete m.reactions.them; }
       continue;
     }
     if(body.kind==='typing'||body.kind==='draft'){ // peer is typing (live typing also sends the words)
@@ -242,20 +253,26 @@ async function pollOnce(){
     if(!['text','img','voice','file'].includes(body.kind)){ continue; }
     c._draft='';   // the real message replaces the live preview
     const ch=chat(c.id);
-    const m={id:body.cid||uid(),from:'them',kind:body.kind,text:body.text||'',img:body.img||null,
-             file:body.file||null,fileName:body.fileName||null,fileSize:body.fileSize||null,
-             audio:body.audio||null,wave:body.wave||null,dur:body.dur||0,
+    if(body.cid&&ch.msgs.some(x=>x.id===body.cid))continue;   // already have it
+    const m={id:safeMid(body.cid),from:'them',kind:body.kind,text:body.text||'',img:safeData(body.img),
+             file:safeData(body.file),fileName:body.fileName||null,fileSize:body.fileSize||null,
+             audio:safeData(body.audio),wave:body.wave||null,dur:body.dur||0,
              ts:body.ts||pkt.ts,status:'read',burn:!!body.burn,replyTo:body.replyTo||null};
     if(body.timer)m.expireAt=now()+body.timer*1000;
     // they're writing to me, so everything I sent them before has reached them
     for(const x of ch.msgs) if(x.from==='me'&&x.status==='sent'&&x.ts<=m.ts) x.status='delivered';
     ch.msgs.push(m);
     const activeInThisChat = (curChat===c.id) && !document.hidden;
-    if(activeInThisChat){ netSendCtl(c,{kind:'read',ids:[m.id]}); if(typeof clearPhoneAlerts==='function')clearPhoneAlerts(c); }
+    if(activeInThisChat){ if(S.set?.readReceipts!==false&&!m.burn)netSendCtl(c,{kind:'read',ids:[m.id]}); if(typeof clearPhoneAlerts==='function')clearPhoneAlerts(c); }
     else { ch.unread=(ch.unread||0)+1;
       if(typeof notifyIncoming==='function') notifyIncoming(c,m);
     }
     if(m.expireAt)scheduleExpiry(m,c.id);
+  }
+  // receipts after the messages: one may be for an echo of mine that just came in
+  for(const r of res.receipts||[]){ // my sent message reached them (receipt = relay deleted its copy)
+    for(const cid in D().chats){ const m=D().chats[cid].msgs.find(x=>x.id===r.client_id);
+      if(m){ if(m.status==='sent'||m.status==='sending'||m.status==='failed')m.status='delivered'; if(r.receipt)m.receipt=r.receipt.slice(0,16); changed=true; } }
   }
   if(changed){ save(); if(curChat)renderMsgs(true); renderChats(); }
   retryFailed();
@@ -299,6 +316,7 @@ async function handleMyEcho(pkt){
 /* ---- incoming group message ---- */
 function handleGroupIncoming(gb){
   if(!gb.gid)return;
+  if((D().leftGroups||[]).includes(gb.gid))return;        // I left it
   let g=D().contacts.find(x=>x.kalId===gb.gid&&x.isGroup);
   if(!g){
     // joined a group we don't have locally yet — create shell
@@ -311,8 +329,8 @@ function handleGroupIncoming(gb){
   const ch=chat(g.id);
   if(ch.msgs.some(x=>x.id===gb.cid))return; // dedup
   if(!['text','img','voice','file'].includes(gb.kind||'text'))return;
-  const m={id:gb.cid||uid(),from:'them',senderName:gb.fromName||'',kind:gb.kind||'text',text:gb.text||'',
-           img:gb.img||null,audio:gb.audio||null,file:gb.file||null,fileName:gb.fileName||null,fileSize:gb.fileSize||null,
+  const m={id:safeMid(gb.cid),from:'them',senderName:gb.fromName||'',kind:gb.kind||'text',text:gb.text||'',
+           img:safeData(gb.img),audio:safeData(gb.audio),file:safeData(gb.file),fileName:gb.fileName||null,fileSize:gb.fileSize||null,
            wave:gb.wave||null,dur:gb.dur||0,
            ts:gb.ts||now(),status:'read'};
   ch.msgs.push(m);

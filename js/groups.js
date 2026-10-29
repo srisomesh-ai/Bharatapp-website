@@ -100,7 +100,10 @@ function askGroupKeys(c){
 /* 'gkey' (added to a group / new key) and 'gkey-request' over a 1:1 chat */
 function onGroupKey(c,body){
   if(!body.gid||!body.key)return;
+  if((D().leftGroups||[]).includes(body.gid))return;      // I left it
   let g=D().contacts.find(x=>x.isGroup&&x.kalId===body.gid);
+  // only a member may hand out (or replace) a group's key
+  if(g&&Array.isArray(g.members)&&g.members.length&&!g.members.includes(c.kalId))return;
   const isNew=!g;
   if(!g){ g={id:uid(),name:body.name||'Group',kalId:body.gid,isGroup:true,members:[],memberNames:{},
     color:COLORS[Math.floor(Math.random()*COLORS.length)],real:true}; D().contacts.push(g); chat(g.id); }

@@ -21,6 +21,12 @@ let inviteTimer=null;
 /* ---------- helpers ---------- */
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Photos, voice notes and files arrive from other people: only real base64
+// data URLs may go into src/href (anything else could run code on this page).
+const DATA_RE=/^data:(image|video|audio|application|text)\/[\w.+-]+(;[\w.+-]+=[\w.+-]+)*;base64,[A-Za-z0-9+\/=\s]*$/;
+function safeData(u){ return typeof u==='string'&&DATA_RE.test(u)?u:null; }
+function safeMid(id){ return typeof id==='string'&&/^[\w.-]{1,64}$/.test(id)?id:uid(); }
+function safeEmoji(e){ return typeof e==='string'&&e.length<=16&&!/[<>"'&]/.test(e)?e:null; }
 const uid=()=>Math.random().toString(36).slice(2,10);
 const now=()=>Date.now();
 function kalId(){const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';const p=n=>Array.from({length:n},()=>A[Math.floor(Math.random()*A.length)]).join('');return `KAL-${p(4)}-${p(4)}`;}
@@ -28,7 +34,25 @@ function fmtTime(ts){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',m
 function fmtDay(ts){const d=new Date(ts),t=new Date();if(d.toDateString()===t.toDateString())return 'Today';const y=new Date(t-864e5);if(d.toDateString()===y.toDateString())return 'Yesterday';return d.toLocaleDateString([],{day:'numeric',month:'short',year:'numeric'});}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('on'),2400);}
 async function sha(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
-function save(){localStorage.setItem(LS_KEY,JSON.stringify(S));}
+function save(){
+  try{ localStorage.setItem(LS_KEY,JSON.stringify(S)); return true; }
+  catch(e){
+    // browser storage full (photos/videos fill it): drop the oldest media
+    // on this browser, keep the words, and try again
+    try{
+      const all=[];
+      for(const a of Object.values(S.data||{})) for(const ch of Object.values(a.chats||{}))
+        for(const m of ch.msgs||[]) if(m.img||m.file||m.audio) all.push(m);
+      all.sort((a,b)=>a.ts-b.ts);
+      for(const m of all.slice(0,Math.max(5,Math.ceil(all.length/2)))){
+        m.img=null; m.file=null; m.audio=null; m.mediaGone=true;
+      }
+      localStorage.setItem(LS_KEY,JSON.stringify(S));
+      if(!save._warned){ save._warned=1; toast('Browser storage full — older photos and files removed from this browser'); }
+      return true;
+    }catch(e2){ return false; }
+  }
+}
 function load(){try{S=JSON.parse(localStorage.getItem(LS_KEY));}catch(e){S=null;}}
 function me(){return S.identities.find(i=>i.id===S.active);}
 function handleOf(o){return o.username?'@'+o.username:o.kalId;}
@@ -431,8 +455,9 @@ function openChat(cid){
         $('scr-chat').appendChild(pb);} pb.textContent='⏳ Request sent — you can chat once '+handleOf(c)+' accepts.'; pb.style.display='block';
       } else if(pb){ pb.style.display='none'; } },0);
   if(c.real&&ch.unread>0){
-    const ids=ch.msgs.filter(x=>x.from==='them').slice(-30).map(x=>x.id);
-    if(ids.length)netSendCtl(c,{kind:'read',ids});
+    // read receipts off in Settings: none; view-once not opened yet: not read
+    const ids=ch.msgs.filter(x=>x.from==='them'&&!(x.burn&&!x.revealed)).slice(-30).map(x=>x.id);
+    if(ids.length&&S.set?.readReceipts!==false)netSendCtl(c,{kind:'read',ids});
   }
   if(c.real)clearPhoneAlerts(c);
   ch.unread=0; save();
@@ -504,6 +529,13 @@ async function deleteChat(cid){
   const c=contact(cid); if(!c)return;
   const name=c.name||handleOf(c)||'this chat';
   closeSheets();
+  if(c.isGroup){
+    if(!await kConfirm({title:'Exit and delete '+name+'?',message:'You will leave the group and its messages will be removed from this browser.',okText:'Exit and delete',danger:true}))return;
+    // leave on the server first, or the group comes back with its next message
+    try{ await api('group_update',{...authBody(),gid:c.kalId,act:'leave'}); }
+    catch(e){ if(e.message!=='group_not_found'&&e.message!=='not_a_member'){ toast('Could not leave the group — please try again'); return; } }
+    D().leftGroups=D().leftGroups||[]; if(!D().leftGroups.includes(c.kalId))D().leftGroups.push(c.kalId);
+  } else
   if(!await kConfirm({title:'Delete '+name+'?',message:'This removes the conversation and the contact from your phone. You can add them again later with their @username. Their copy is not affected.',okText:'Delete',danger:true}))return;
   // remove the chat's messages (chats is an object keyed by id)
   if(D().chats[cid])delete D().chats[cid];
@@ -573,9 +605,11 @@ function ticks(m){
 }
 function fileHTML(m){
   const name=esc(m.fileName||'file'), kb=m.fileSize?Math.max(1,Math.round(m.fileSize/1024))+' KB':'';
-  if(/^data:video\//.test(m.file||'')) return `<video src="${m.file}" controls preload="metadata"></video>`;
+  const f=safeData(m.file);
+  if(m.mediaGone&&!f) return `<div class="file-card"><span class="fi">${esc(((m.fileName||'').split('.').pop()||'FILE').slice(0,4).toUpperCase())}</span><span>${name}<small>Removed from this browser</small></span></div>`;
+  if(/^data:video\//.test(f||'')) return `<video src="${esc(f)}" controls preload="metadata"></video>`;
   const ext=(m.fileName||'').split('.').pop().slice(0,4).toUpperCase()||'FILE';
-  return `<a class="file-card" href="${m.file||'#'}" download="${name}"><span class="fi">${esc(ext)}</span><span>${name}<small>${kb} · tap to download</small></span></a>`;
+  return `<a class="file-card" href="${f?esc(f):'#'}" download="${name}"><span class="fi">${esc(ext)}</span><span>${name}<small>${kb} · tap to download</small></span></a>`;
 }
 function renderMsgs(scroll){
   const box=$('msgs'); const ch=chat(curChat); const c=contact(curChat);
@@ -602,7 +636,7 @@ function reactionChips(m){
   if(m.reactions.me)set.push(m.reactions.me);
   if(m.reactions.them&&m.reactions.them!==m.reactions.me)set.push(m.reactions.them);
   if(!set.length)return '';
-  return `<div class="msg-reacts">${set.map(e=>`<span>${e}</span>`).join('')}</div>`;
+  return `<div class="msg-reacts">${set.map(e=>`<span>${esc(e)}</span>`).join('')}</div>`;
 }
 function msgHTML(m,c){
   const side=m.from==='me'?'mine':'theirs';
@@ -610,11 +644,11 @@ function msgHTML(m,c){
   let inner='';
   if(m.burn && !m.revealed){
     inner=`<div class="burn-cover">🔥 ${m.from==='me'?'Burn message · waiting to be read':'Tap to view once'}</div>`;
-    return `<div class="brow ${side}"><div class="bub burnable" data-mid="${m.id}">${inner}<div class="meta">${fmtTime(m.ts)} ${ticks(m)}</div></div></div>`;
+    return `<div class="brow ${side}"><div class="bub burnable" data-mid="${esc(m.id)}">${inner}<div class="meta">${fmtTime(m.ts)} ${ticks(m)}</div></div></div>`;
   }
   if(c.isGroup&&m.from==='them'&&m.senderName) inner+=`<div class="grp-sender">${esc(m.senderName)}</div>`;
   if(m.replyTo) inner+=`<div class="quote"><b>${m.replyTo.from==='me'?'You':esc(c.name)}</b>${esc(m.replyTo.text)}</div>`;
-  if(m.kind==='img') inner+=`<img src="${m.img}" alt="photo">`;
+  if(m.kind==='img') inner+=safeData(m.img)?`<img src="${esc(m.img)}" alt="photo">`:`<div class="burned-stub">📷 Photo${m.mediaGone?' · removed from this browser':''}</div>`;
   if(m.kind==='voice') inner+=voiceBubbleHTML(m);
   if(m.kind==='file') inner+=fileHTML(m);
   if(m.text) inner+=esc(m.text);
@@ -625,7 +659,7 @@ function msgHTML(m,c){
   const peerOnline=!!(curChat&&contact(curChat)?._online);
   const readCls=m.from!=='me'?'':m.status==='read'?' is-read':m.status==='delivered'?'':
     (m.status==='failed'||!peerOnline)?' is-waiting':'';
-  return `<div class="brow ${side}"><div class="bub-wrap"><div class="bub${burnCls}${readCls}" data-mid="${m.id}">${inner}${burnBar}<div class="meta">${m.expireAt?'⌛ ':''}${fmtTime(m.ts)} ${ticks(m)}</div></div>${reacts}</div></div>`;
+  return `<div class="brow ${side}"><div class="bub-wrap"><div class="bub${burnCls}${readCls}" data-mid="${esc(m.id)}">${inner}${burnBar}<div class="meta">${m.expireAt?'⌛ ':''}${fmtTime(m.ts)} ${ticks(m)}</div></div>${reacts}</div></div>`;
 }
 const BURN_VIEW_S=6;
 function onBubbleTap(mid){
@@ -718,7 +752,8 @@ function pushMine(part){
     netSendGroup(c,m).catch(()=>toast('Group message not sent — check internet'));
   } else if(c.real){
     stopDraft(c);
-    netSend(c,m).then(()=>{ if(m.status==='sending'){ m.status='sent'; save(); if(curChat===c.id)renderMsgs(false); } }).catch(e=>{
+    _inflight.add(m.id);
+    netSend(c,m).finally(()=>_inflight.delete(m.id)).then(()=>{ if(m.status==='sending'){ m.status='sent'; save(); if(curChat===c.id)renderMsgs(false); } }).catch(e=>{
       m.status='failed'; save(); if(curChat===c.id)renderMsgs(false);
       if(e.message==='auth_required'||e.message==='auth_failed')
         toast('⚠️ This account is not activated on the server — go to Privacy → Log out, then sign up fresh');
@@ -726,6 +761,8 @@ function pushMine(part){
         toast('That account no longer exists on the server');
       else if(e.message==='account_disabled')
         toast('⚠️ This account has been disabled by the administrator');
+      else if(e.message==='not_connected')
+        toast('Not sent — you are not connected with this person any more');
       else toast('Not sent yet — it will send when you are back online');
     });
   }
@@ -735,7 +772,10 @@ function pushMine(part){
 function scheduleExpiry(m,cid){
   if(!m.expireAt)return;
   const dt=m.expireAt-now();
+  // browsers fire timers over ~24.8 days at once: wait in steps
+  if(dt>2e9){ setTimeout(()=>scheduleExpiry(m,cid),2e9); return; }
   setTimeout(()=>{
+    if(m.expireAt>now()+1000){ scheduleExpiry(m,cid); return; }
     const ch=chat(cid); const i=ch.msgs.findIndex(x=>x.id===m.id);
     if(i<0)return; ch.msgs.splice(i,1); save();
     if(curChat===cid)renderMsgs(false); renderChats();
