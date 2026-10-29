@@ -88,3 +88,8 @@ details.s-faq p{margin:8px 0 0}
   .store .st-t b{font-size:15px}
 }
 .s-main .store .st-t b,.s-main .store .st-t small{color:#fff}
+
+/* Google Play is live: a real link */
+a.store{text-decoration:none;cursor:pointer;transition:transform .15s,border-color .15s}
+a.store:hover{border-color:#777;transform:translateY(-1px)}
+a.store,a.store:visited{color:#fff}

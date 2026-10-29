@@ -295,3 +295,8 @@
 .bx-faq p{margin:8px 0 0;font-size:14.5px;color:var(--bx-soft);line-height:1.55}
 @media (min-width:760px){.lp-foot-cols{grid-template-columns:1.4fr 1fr 1fr 1.2fr 1fr}}
 .bx-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Google Play is live: a real link */
+a.store{text-decoration:none;cursor:pointer;transition:transform .15s,border-color .15s}
+a.store:hover{border-color:#777;transform:translateY(-1px)}
+#scr-landing a.store,#scr-landing a.store:visited,a.store,a.store:visited{color:#fff}
