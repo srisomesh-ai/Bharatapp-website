@@ -128,6 +128,10 @@ async function netSendCtl(c,obj){ // control messages: read receipts, burn acks 
 
 /* ---- polling ---- */
 function startPoll(){ stopPoll(); pollTimer=setInterval(pollOnce,POLL_MS); pollOnce(); }
+// back on screen or back online: check (and send anything waiting) at once -
+// browsers slow timers down a lot in hidden tabs
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&pollTimer)pollOnce(); });
+window.addEventListener('online',()=>{ if(pollTimer)pollOnce(); });
 function stopPoll(){ if(pollTimer)clearInterval(pollTimer); pollTimer=null; }
 
 /* ---- encrypted backup & restore ---- */
