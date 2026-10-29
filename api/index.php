@@ -201,8 +201,9 @@ function send(PDO $pdo, array $in): void {
   }
   deliver($pdo, $to, $me['kal_id'], $cid, $iv, $blob);
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $to, $cid, $iv, $blob);
-  if ($to === supportId($pdo) && ($in['push'] ?? 'message') === 'message') emailSupportNotice($pdo, $me['kal_id']);
   logForward($pdo, $in, $me['kal_id']);
+  answerNow(['queued' => true]);
+  if ($to === supportId($pdo) && ($in['push'] ?? 'message') === 'message') emailSupportNotice($pdo, $me['kal_id']);
   // best-effort push (content stays private — generic text only)
   $sname = '';
   $us = $pdo->prepare('SELECT username FROM k_users WHERE kal_id=?'); $us->execute([$me['kal_id']]);
@@ -228,7 +229,7 @@ function send(PDO $pdo, array $in): void {
   } elseif ($hint !== 'none') {   // 'none': receipts, reactions and other quiet signals
     sendPush($pdo, $to, $sname, 'New message', $me['kal_id']);
   }
-  out(true, ['queued' => true]);
+  exit;   // the answer already went out
 }
 
 function fetchMsgs(PDO $pdo, array $in): void {
@@ -1264,8 +1265,15 @@ function fcmServiceAccount(): ?array {
 }
 
 function fcmAccessToken(): ?string {
+  static $mem = null;
+  if ($mem) return $mem;
   $sa = fcmServiceAccount();
   if (!$sa) return null;
+  // Google's token lasts an hour: reuse it (asking for a new one on every
+  // message made each send wait for an extra round trip to Google)
+  $cache = sys_get_temp_dir() . '/bharatapp_fcm_' . md5((string)$sa['client_email']) . '.json';
+  $c = @json_decode((string)@file_get_contents($cache), true);
+  if (is_array($c) && ($c['exp'] ?? 0) > time() + 60 && !empty($c['tok'])) return $mem = $c['tok'];
   $now = time();
   $header = rtrim(strtr(base64_encode(json_encode(['alg'=>'RS256','typ'=>'JWT'])), '+/', '-_'), '=');
   $claim = rtrim(strtr(base64_encode(json_encode([
@@ -1279,7 +1287,12 @@ function fcmAccessToken(): ?string {
     CURLOPT_POSTFIELDS=>http_build_query(['grant_type'=>'urn:ietf:params:oauth:grant-type:jwt-bearer','assertion'=>$jwt])]);
   $res = curl_exec($ch); curl_close($ch);
   $j = json_decode($res, true);
-  return $j['access_token'] ?? null;
+  $tok = $j['access_token'] ?? null;
+  if ($tok) {
+    @file_put_contents($cache, json_encode(['tok' => $tok, 'exp' => $now + (int)($j['expires_in'] ?? 3600) - 300]), LOCK_EX);
+    @chmod($cache, 0600);
+  }
+  return $mem = $tok;
 }
 
 /* Last seen of `target`. (It used to read the target from kal_id, the same
@@ -1735,6 +1748,9 @@ function groupSend(PDO $pdo, array $in): void {
     if ($mm === $me['kal_id']) continue;
     deliver($pdo, $mm, $me['kal_id'], $cid, $iv, $blob);
   }
+  if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $gid, $cid, $iv, $blob);
+  logForward($pdo, $in, $me['kal_id']);
+  answerNow(['sent' => true, 'gid' => $gid]);
   // wake members' phones (content stays private)
   $gn = $pdo->prepare('SELECT name FROM k_groups WHERE gid = ?'); $gn->execute([$gid]);
   $gname = (string)($gn->fetchColumn() ?: 'Group');
@@ -1744,9 +1760,7 @@ function groupSend(PDO $pdo, array $in): void {
     if ($mm === $me['kal_id']) continue;
     sendPush($pdo, $mm, $gname, $sname.' sent a message', $me['kal_id'], 'message', false, ['group' => $gid]);
   }
-  if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $gid, $cid, $iv, $blob);
-  logForward($pdo, $in, $me['kal_id']);
-  out(true, ['sent' => true, 'gid' => $gid]);
+  exit;   // the answer already went out
 }
 
 /* ---------------- call relay (TURN) ----------------
@@ -1951,4 +1965,18 @@ function migrate(PDO $pdo): void {
 function out(bool $ok, array $data = []): void {
   echo json_encode(['ok' => $ok] + $data);
   exit;
+}
+/* Give the app its answer now and carry on (notifications) after, so a
+   send never waits for Google. */
+function answerNow(array $data): void {
+  $body = json_encode(['ok' => true] + $data);
+  ignore_user_abort(true);
+  if (!headers_sent()) {
+    header('Content-Length: ' . strlen($body));
+    header('Connection: close');
+  }
+  echo $body;
+  if (function_exists('litespeed_finish_request')) litespeed_finish_request();
+  elseif (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+  else { while (ob_get_level() > 0) @ob_end_flush(); flush(); }
 }
