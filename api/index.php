@@ -174,11 +174,23 @@ function send(PDO $pdo, array $in): void {
   // BharatApp Chat Support takes chats only, no calls
   if (str_starts_with((string)($in['push'] ?? ''), 'call')
       && ($to === supportId($pdo) || $me['kal_id'] === supportId($pdo))) out(false, ['error' => 'calls_off']);
-  // contact-request gate: must be accepted in either direction (groups bypass via gid handled in group_send)
-  $st = $pdo->prepare("SELECT status FROM k_contacts WHERE (a=? AND b=?) OR (a=? AND b=?) LIMIT 1");
-  $st->execute([$me['kal_id'],$to,$to,$me['kal_id']]);
-  $rel = $st->fetch();
-  if (!$rel || $rel['status'] !== 'accepted') out(false, ['error' => 'not_connected']);
+  $hint = (string)($in['push'] ?? 'message');   // app says what this is
+  // group call signals go between members of the same group, contacts or not
+  $gname = null;
+  if (str_starts_with($hint, 'gcall')) {
+    groupMigrate($pdo);
+    $gs = $pdo->prepare('SELECT * FROM k_groups WHERE gid = ?'); $gs->execute([(string)($in['gid'] ?? '')]);
+    $g = $gs->fetch();
+    $gm = $g ? groupView($g)['members'] : [];
+    if (!in_array($me['kal_id'], $gm, true) || !in_array($to, $gm, true)) out(false, ['error' => 'not_connected']);
+    $gname = (string)$g['name'];
+  } else {
+    // contact-request gate: must be accepted in either direction (groups bypass via gid handled in group_send)
+    $st = $pdo->prepare("SELECT status FROM k_contacts WHERE (a=? AND b=?) OR (a=? AND b=?) LIMIT 1");
+    $st->execute([$me['kal_id'],$to,$to,$me['kal_id']]);
+    $rel = $st->fetch();
+    if (!$rel || $rel['status'] !== 'accepted') out(false, ['error' => 'not_connected']);
+  }
   // "typing" and live-typing signals: only worth delivering to someone who is
   // online right now, never stored for later, never a notification
   if (!empty($in['live'])) {
@@ -196,8 +208,15 @@ function send(PDO $pdo, array $in): void {
   $us = $pdo->prepare('SELECT username FROM k_users WHERE kal_id=?'); $us->execute([$me['kal_id']]);
   $u = $us->fetch(); $sname = $u && $u['username'] ? '@'.$u['username'] : 'Someone';
   // A call offer must wake the phone; ordinary messages get the usual alert.
-  $hint = (string)($in['push'] ?? 'message');   // app says what this is
-  if (str_starts_with($hint, 'call')) {
+  if ($gname !== null) {
+    if ($hint === 'gcall-invite') {
+      if (allowedBy($pdo, $to, 'calls', $me['kal_id']))
+        sendPush($pdo, $to, $gname, $sname . ' is calling the group', $me['kal_id'], 'call', false, ['group' => (string)$in['gid']]);
+    } elseif ($hint === 'gcall-end') {
+      sendPush($pdo, $to, $gname, 'Missed group call', $me['kal_id'], 'call_end');
+    }
+    // joins, offers, answers and leaves are silent - the app is awake by then
+  } elseif (str_starts_with($hint, 'call')) {
     if ($hint === 'call-offer') {
       if (allowedBy($pdo, $to, 'calls', $me['kal_id']))
         sendPush($pdo, $to, $sname, 'Incoming voice call', $me['kal_id'], 'call');
