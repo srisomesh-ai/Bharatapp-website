@@ -166,7 +166,7 @@ function send(PDO $pdo, array $in): void {
   $blob = (string)($in['blob'] ?? '');       // base64 AES-GCM ciphertext — opaque to server
   $iv = (string)($in['iv'] ?? '');
   $cid = substr((string)($in['client_id'] ?? ''), 0, 32); // sender's message id, for receipt matching
-  if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $to) || $blob === '' || strlen($blob) > 10000000) out(false, ['error' => 'bad_input']);
+  if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $to) || $blob === '' || strlen($blob) > 16000000) out(false, ['error' => 'bad_input']);
   $st = $pdo->prepare('SELECT 1 FROM k_users WHERE kal_id = ?'); $st->execute([$to]);
   if (!$st->fetch()) out(false, ['error' => 'recipient_not_found']);
   $st = $pdo->prepare('SELECT 1 FROM k_blocks WHERE blocker = ? AND blocked = ?'); $st->execute([$to, $me['kal_id']]);
@@ -247,7 +247,12 @@ function fetchMsgs(PDO $pdo, array $in): void {
   $st = $pdo->prepare('SELECT * FROM k_queue WHERE to_id = ? AND dev = ? ORDER BY id ASC LIMIT 100');
   $st->execute([$me['kal_id'], $me['dev']]);
   $rows = $st->fetchAll();
+  $bytes = 0;
   foreach ($rows as $r) {
+    // photos / videos make rows big: hand out about 12 MB per check (always
+    // at least one), the rest comes with the next check seconds later
+    $bytes += strlen((string)$r['payload']);
+    if ($bytes > 12000000 && !empty($out['messages'])) break;
     $pdo->prepare('DELETE FROM k_queue WHERE id = ?')->execute([$r['id']]);
     if ($r['peer'] !== '') {
       // a message I sent from another of my devices — "to" says which chat
@@ -1754,7 +1759,7 @@ function groupSend(PDO $pdo, array $in): void {
   $iv = (string)($in['iv'] ?? '');
   $blob = (string)($in['blob'] ?? '');
   $cid = substr((string)($in['client_id'] ?? ''), 0, 32);
-  if ($blob === '' || strlen($blob) > 10000000) out(false, ['error' => 'bad_input']);
+  if ($blob === '' || strlen($blob) > 16000000) out(false, ['error' => 'bad_input']);
   groupMigrate($pdo);
   $st = $pdo->prepare('SELECT * FROM k_groups WHERE gid = ?'); $st->execute([$gid]);
   $g = $st->fetch();
