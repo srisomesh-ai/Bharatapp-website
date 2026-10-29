@@ -5,7 +5,7 @@ function isNativeApp(){
   return /KalisiApp/i.test(navigator.userAgent) || location.search.indexOf('app=1')>=0 || window.KalisiNative || window.KalisiBundled || location.protocol==='file:';
 }
 /* ---- invite links (what the QR holds): bharatapp.chat/add/<username> ---- */
-const PLAY_URL='https://play.google.com/store/apps/details?id=com.messenger.app';
+const PLAY_URL='https://play.google.com/store/apps/details?id=chat.bharatappchat.app';
 function inviteLink(username){ return 'https://bharatapp.chat/add/'+username; }
 /* Returns true when the page was opened from an invite and handled it. */
 function handleInvite(){
@@ -14,7 +14,7 @@ function handleInvite(){
   history.replaceState(null,'',location.pathname);
   // Android: open the app if it's installed, otherwise the Play Store
   if(/Android/i.test(navigator.userAgent)&&!isNativeApp()){
-    location.href='intent://add/'+u+'#Intent;scheme=kalisi;package=com.messenger.app;S.browser_fallback_url='+encodeURIComponent(PLAY_URL)+';end';
+    location.href='intent://add/'+u+'#Intent;scheme=kalisi;package=chat.bharatappchat.app;S.browser_fallback_url='+encodeURIComponent(PLAY_URL)+';end';
   }
   showInvite(u);
   return true;
