@@ -62,8 +62,8 @@ function openMyStatus(){
     const it=items[idx];
     let media='';
     if(it.type==='text')media=`<div class="sv-text">${esc(it.payload)}</div>`;
-    else if(it.type==='photo')media=`<img class="sv-img" src="${it.payload}">`;
-    else if(it.type==='voice')media=`<div class="sv-voice"><button class="voice-play" onclick="new Audio('${it.payload}').play()">▶ Play voice</button></div>`;
+    else if(it.type==='photo')media=statusSrc(it.payload)?`<img class="sv-img" src="${esc(statusSrc(it.payload))}">`:'';
+    else if(it.type==='voice')media=`<div class="sv-voice"><button class="voice-play" onclick="playStatusVoice(${+it.id||0})">▶ Play voice</button></div>`;
     $('status-view-body').innerHTML=`
       <div class="sv-bars">${items.map((_,i)=>`<span class="${i<=idx?'on':''}"></span>`).join('')}</div>
       <div class="sv-head">${avatarHTML(me(),'small')}<div><div class="sv-name">My status</div>
@@ -177,8 +177,8 @@ function viewStatus(kalId){
     const it=items[idx];
     let media='';
     if(it.type==='text')media=`<div class="sv-text">${esc(it.payload)}</div>`;
-    else if(it.type==='photo')media=`<img class="sv-img" src="${it.payload}">`;
-    else if(it.type==='voice')media=`<div class="sv-voice"><button class="voice-play" onclick="new Audio('${it.payload}').play()">▶ Play voice</button></div>`;
+    else if(it.type==='photo')media=statusSrc(it.payload)?`<img class="sv-img" src="${esc(statusSrc(it.payload))}">`:'';
+    else if(it.type==='voice')media=`<div class="sv-voice"><button class="voice-play" onclick="playStatusVoice(${+it.id||0})">▶ Play voice</button></div>`;
     if(it.id&&me().token){ api('status_view',{...authBody(),status_id:it.id}).catch(()=>{}); }
     $('status-view-body').innerHTML=`
       <div class="sv-bars">${items.map((_,i)=>`<span class="${i<=idx?'on':''}"></span>`).join('')}</div>
@@ -187,7 +187,7 @@ function viewStatus(kalId){
       <div class="sv-media" onclick="statusNext()">${media}</div>
       <div class="sv-actions">
         <button class="sv-act" id="sv-like" onclick="reactStatus(${it.id})">🤍 <span id="sv-like-c"></span></button>
-        <button class="sv-act" onclick="replyToStatus('${it.kal_id}',${JSON.stringify(JSON.stringify(previewOf(it)))})">↩ Reply</button>
+        <button class="sv-act" onclick="replyToStatus(${+it.id||0})">↩ Reply</button>
         ${it.allow_share?`<button class="sv-act" onclick="shareStatus(${it.id})">↗ Share</button>`:''}
       </div>`;
     loadReactions(it.id);
@@ -211,8 +211,18 @@ async function reactStatus(sid){
   if(!me()?.token){toast('Sign up to react');return;}
   try{ await api('status_react',{...authBody(),status_id:sid,emoji:'❤'}); loadReactions(sid); }catch(e){}
 }
-function replyToStatus(kalId,previewJson){
-  let preview=''; try{ preview=JSON.parse(previewJson);}catch(e){}
+/* A status payload is a data URL, or "file:https://…" for big ones the
+   server keeps as a file. Anything else is not shown. */
+function statusSrc(p){
+  if(typeof p!=='string')return null;
+  if(p.startsWith('file:')){ const u=p.slice(5); return /^https:\/\/[^"'<>\s]+$/.test(u)?u:null; }
+  return safeData(p);
+}
+function _statusById(sid){ for(const s of _statusFeed) if(+s.id===+sid) return s; return null; }
+function playStatusVoice(sid){ const it=_statusById(sid); const u=it&&statusSrc(it.payload); if(u) new Audio(u).play().catch(()=>{}); }
+function replyToStatus(sid){
+  const it=_statusById(sid); if(!it)return;
+  const kalId=it.kal_id, preview=previewOf(it);
   const c=D().contacts.find(x=>x.kalId===kalId);
   if(!c){ toast('Add this contact first'); return; }
   closeSheets();

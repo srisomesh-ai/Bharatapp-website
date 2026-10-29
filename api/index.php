@@ -59,6 +59,8 @@ try {
     case 'contacts_state': contactsState($pdo, $in); break;
     case 'presence':      presence($pdo, $in); break;
     case 'fcm_register':  fcmRegister($pdo, $in); break;
+    case 'fcm_unregister': fcmUnregister($pdo, $in); break;
+    case 'fetch_ack':     fetchAck($pdo, $in); break;
     case 'notify_devices': notifyDevices($pdo, $in); break;
     case 'privacy_get':   privacyGet($pdo, $in); break;
     case 'privacy_set':   privacySet($pdo, $in); break;
@@ -166,7 +168,7 @@ function send(PDO $pdo, array $in): void {
   $blob = (string)($in['blob'] ?? '');       // base64 AES-GCM ciphertext — opaque to server
   $iv = (string)($in['iv'] ?? '');
   $cid = substr((string)($in['client_id'] ?? ''), 0, 32); // sender's message id, for receipt matching
-  if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $to) || $blob === '' || strlen($blob) > 16000000) out(false, ['error' => 'bad_input']);
+  if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $to) || $blob === '' || strlen($blob) > 16000000 || strlen($iv) > 64) out(false, ['error' => 'bad_input']);
   $st = $pdo->prepare('SELECT 1 FROM k_users WHERE kal_id = ?'); $st->execute([$to]);
   if (!$st->fetch()) out(false, ['error' => 'recipient_not_found']);
   $st = $pdo->prepare('SELECT 1 FROM k_blocks WHERE blocker = ? AND blocked = ?'); $st->execute([$to, $me['kal_id']]);
@@ -232,6 +234,26 @@ function send(PDO $pdo, array $in): void {
   exit;   // the answer already went out
 }
 
+/* The app saved everything up to queue id $upTo: delete those copies and
+   tell their senders (delivered / deletion proof). */
+function ackQueue(PDO $pdo, array $me, int $upTo): int {
+  $st = $pdo->prepare('SELECT id, to_id, from_id, client_id, peer FROM k_queue WHERE to_id = ? AND dev = ? AND id <= ?');
+  $st->execute([$me['kal_id'], $me['dev'], $upTo]);
+  $del = $pdo->prepare('DELETE FROM k_queue WHERE id = ?');
+  $n = 0;
+  foreach ($st->fetchAll() as $r) {
+    $del->execute([$r['id']]);
+    if ($del->rowCount() !== 1) continue;   // another check took it
+    $n++;
+    if ($r['peer'] === '') issueReceiptIfDone($pdo, $r['to_id'], $r['from_id'], $r['client_id'], (string)$r['id']);
+  }
+  return $n;
+}
+function fetchAck(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $n = ackQueue($pdo, $me, (int)($in['ack'] ?? 0));
+  out(true, ['acked' => $n]);
+}
 function fetchMsgs(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
   // undelivered copies are kept at most 30 days (Privacy Policy); tidy now and then
@@ -244,16 +266,42 @@ function fetchMsgs(PDO $pdo, array $in): void {
   // 1) drain my incoming messages, deleting each and issuing a deletion receipt to the sender
   // Each logged-in device has its own copy, so the phone and the browser
   // both get every message.
-  $st = $pdo->prepare('SELECT * FROM k_queue WHERE to_id = ? AND dev = ? ORDER BY id ASC LIMIT 100');
+  // copies kept while no device was signed in belong to whoever signs in
+  // next - also the original login
+  if ($me['dev'] === '') {
+    try { $pdo->prepare("UPDATE k_queue SET dev = '' WHERE to_id = ? AND dev = '#hold'")->execute([$me['kal_id']]); } catch (Throwable $e) {}
+  }
+  // sizes first, then each row on its own: 100 videos loaded at once ran the
+  // server out of memory and the inbox stayed stuck
+  $st = $pdo->prepare('SELECT id, LENGTH(payload) AS n FROM k_queue WHERE to_id = ? AND dev = ? ORDER BY id ASC LIMIT 100');
   $st->execute([$me['kal_id'], $me['dev']]);
-  $rows = $st->fetchAll();
+  $heads = $st->fetchAll();
+  $one = $pdo->prepare('SELECT * FROM k_queue WHERE id = ?');
+  $take = $pdo->prepare('DELETE FROM k_queue WHERE id = ?');
+  // Newer apps (v2) confirm with fetch_ack once a message is saved on the
+  // phone; only then is the server's copy deleted. A download cut off by a
+  // weak network used to lose those messages for good.
+  $v2 = !empty($in['v2']);
+  if ($v2 && (int)($in['ack'] ?? 0) > 0) ackQueue($pdo, $me, (int)$in['ack']);
   $bytes = 0;
-  foreach ($rows as $r) {
+  foreach ($heads as $h) {
     // photos / videos make rows big: hand out about 12 MB per check (always
     // at least one), the rest comes with the next check seconds later
-    $bytes += strlen((string)$r['payload']);
+    $bytes += (int)$h['n'];
     if ($bytes > 12000000 && !empty($out['messages'])) break;
-    $pdo->prepare('DELETE FROM k_queue WHERE id = ?')->execute([$r['id']]);
+    $one->execute([$h['id']]);
+    $r = $one->fetch();
+    if (!$r) continue;
+    if ($v2) {
+      // handed out, kept until acknowledged (qid = what to acknowledge)
+      $row = ['qid' => (int)$r['id'], 'from' => $r['from_id'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000, 'cid' => $r['client_id']];
+      if ($r['peer'] !== '') $row['to'] = $r['peer'];
+      $out['messages'][] = $row;
+      continue;
+    }
+    // two checks at the same moment: only the one that deletes the row hands it out
+    $take->execute([$r['id']]);
+    if ($take->rowCount() !== 1) continue;
     if ($r['peer'] !== '') {
       // a message I sent from another of my devices — "to" says which chat
       $out['messages'][] = ['from' => $r['from_id'], 'to' => $r['peer'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000];
@@ -642,7 +690,7 @@ function passwordReset(PDO $pdo, array $in): void {
   $pdo->prepare('DELETE FROM k_email_otp WHERE email = ?')->execute([$r['_email']]);
   unset($pubkey['d']);
   $kid = $r['kal_id'];
-  $pdo->prepare('UPDATE k_users SET pubkey = ?, verifier = ?, salt = ?, key_username = ?, token = ? WHERE kal_id = ?')
+  $pdo->prepare('UPDATE k_users SET pubkey = ?, verifier = ?, salt = ?, key_username = ?, token = ?, main_seen = NULL WHERE kal_id = ?')
       ->execute([json_encode($pubkey), password_hash($verifier, PASSWORD_DEFAULT), $salt,
                  $r['username'], bin2hex(random_bytes(24)), $kid]);
   foreach (['DELETE FROM k_queue WHERE to_id = ?', 'DELETE FROM k_devices WHERE kal_id = ?',
@@ -676,6 +724,22 @@ function accountDelete(PDO $pdo, array $in): void {
       if (is_file($path)) @unlink($path);
     }
   } catch (Throwable $e) {}
+  // leave every group (a deleted owner left the others unable to manage it)
+  try {
+    groupMigrate($pdo);
+    $gq = $pdo->prepare('SELECT * FROM k_groups WHERE members LIKE ?');
+    $gq->execute(['%' . $kid . '%']);
+    foreach ($gq->fetchAll() as $g) {
+      $v = groupView($g);
+      $members = array_values(array_filter($v['members'], fn($m) => $m !== $kid));
+      if (!$members) { $pdo->prepare('DELETE FROM k_groups WHERE gid = ?')->execute([$g['gid']]); continue; }
+      $admins = array_values(array_filter($v['admins'], fn($m) => $m !== $kid));
+      if (!$admins) $admins = [$members[0]];
+      $owner = $g['owner'] === $kid ? $admins[0] : $g['owner'];
+      $pdo->prepare('UPDATE k_groups SET members = ?, admins = ?, owner = ? WHERE gid = ?')
+          ->execute([json_encode($members), json_encode($admins), $owner, $g['gid']]);
+    }
+  } catch (Throwable $e) {}
   $del = [
     'DELETE FROM k_queue WHERE to_id = ? OR from_id = ?' => 2,
     'DELETE FROM k_receipts WHERE to_id = ?' => 1,
@@ -706,6 +770,13 @@ function deviceList(PDO $pdo, array $in): void {
 }
 
 /* Log a device out — your own, or another of yours by id. */
+/* Logging out on a phone: it stops getting this account's notifications. */
+function fcmUnregister(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $t = (string)($in['fcm_token'] ?? '');
+  if ($t !== '') $pdo->prepare('DELETE FROM k_fcm WHERE kal_id = ? AND token = ?')->execute([$me['kal_id'], $t]);
+  out(true, ['removed' => $t !== '']);
+}
 function deviceRemove(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
   $id = (string)($in['id'] ?? $me['dev']);
@@ -766,11 +837,12 @@ function mainLoginAlive(PDO $pdo, string $kalId): bool {
  * other devices already took theirs).
  */
 function pruneMainCopies(PDO $pdo, string $kalId): void {
-  $st = $pdo->prepare("SELECT id, from_id, client_id FROM k_queue WHERE to_id = ? AND dev = '' AND peer = ''");
+  // only copies that waited 30 days: a message from yesterday is still kept
+  $st = $pdo->prepare("SELECT id, from_id, client_id FROM k_queue WHERE to_id = ? AND dev = '' AND peer = '' AND created_at < (NOW() - INTERVAL 30 DAY)");
   $st->execute([$kalId]);
   $rows = $st->fetchAll();
   if (!$rows) return;
-  $pdo->prepare("DELETE FROM k_queue WHERE to_id = ? AND dev = ''")->execute([$kalId]);
+  $pdo->prepare("DELETE FROM k_queue WHERE to_id = ? AND dev = '' AND created_at < (NOW() - INTERVAL 30 DAY)")->execute([$kalId]);
   foreach ($rows as $r) issueReceiptIfDone($pdo, $kalId, $r['from_id'], $r['client_id'], (string)$r['id']);
 }
 
@@ -778,7 +850,14 @@ function pruneMainCopies(PDO $pdo, string $kalId): void {
 function issueReceiptIfDone(PDO $pdo, string $to, string $from, string $cid, string $salt): string {
   $left = $pdo->prepare("SELECT 1 FROM k_queue WHERE to_id = ? AND from_id = ? AND client_id = ? AND peer = '' LIMIT 1");
   $left->execute([$to, $from, $cid]);
-  if ($left->fetch()) return '';
+  if ($left->fetch()) {
+    // Reached one of their devices (another, e.g. a closed browser, has yet
+    // to fetch its copy): tell the sender "delivered" now - an empty receipt.
+    // Waiting for every device left messages undelivered (red) for days.
+    $ins = $pdo->prepare("INSERT INTO k_receipts (to_id, dev, client_id, receipt, created_at) VALUES (?,?,?,'',NOW())");
+    foreach (deviceIds($pdo, $from) as $d) if ($d !== '#hold') $ins->execute([$from, $d, $cid]);
+    return '';
+  }
   $receipt = hash('sha256', $salt . '|' . $cid . '|' . microtime(true) . '|deleted');
   $ins = $pdo->prepare('INSERT INTO k_receipts (to_id, dev, client_id, receipt, created_at) VALUES (?,?,?,?,NOW())');
   foreach (deviceIds($pdo, $from) as $d) if ($d !== '#hold') $ins->execute([$from, $d, $cid, $receipt]);
@@ -1333,6 +1412,31 @@ function privacyOf(PDO $pdo, string $kid): array {
   } catch (Throwable $e) {}
   return $cache[$kid] = $p;
 }
+/* Someone I may put in a group: an accepted contact who hasn't blocked me. */
+function mayAddToGroup(PDO $pdo, string $me, string $who): bool {
+  if ($who === $me || !areContacts($pdo, $me, $who)) return false;
+  $st = $pdo->prepare('SELECT 1 FROM k_blocks WHERE blocker = ? AND blocked = ?');
+  $st->execute([$who, $me]);
+  return !$st->fetch();
+}
+/* The status, if $me may see it (its owner, or a contact its privacy allows). */
+function visibleStatus(PDO $pdo, string $me, int $sid): ?array {
+  $st = $pdo->prepare('SELECT id, kal_id FROM k_status WHERE id = ?');
+  $st->execute([$sid]);
+  $s = $st->fetch();
+  if (!$s) return null;
+  $owner = (string)$s['kal_id'];
+  if ($owner === $me) return $s;
+  if (!areContacts($pdo, $owner, $me)) return null;
+  $p = privacyOf($pdo, $owner);
+  $list = $p['status_list'] ?? [];
+  $ok = match ($p['status'] ?? 'contacts') {
+    'except' => !in_array($me, $list, true),
+    'only'   => in_array($me, $list, true),
+    default  => true,
+  };
+  return $ok ? $s : null;
+}
 function areContacts(PDO $pdo, string $a, string $b): bool {
   if ($a === $b) return true;
   $st = $pdo->prepare("SELECT 1 FROM k_contacts WHERE ((a=? AND b=?) OR (a=? AND b=?)) AND status='accepted' LIMIT 1");
@@ -1375,6 +1479,7 @@ function statusView(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
   $sid = (int)($in['status_id'] ?? 0);
   if ($sid<=0) out(false,['error'=>'bad_input']);
+  if (!visibleStatus($pdo, $me['kal_id'], $sid)) out(false, ['error' => 'not_found']);
   $pdo->prepare("INSERT IGNORE INTO k_status_views (status_id, viewer, created_at) VALUES (?,?,NOW())")
       ->execute([$sid, $me['kal_id']]);
   out(true, ['viewed'=>true]);
@@ -1416,8 +1521,10 @@ function statusDelete(PDO $pdo, array $in): void {
       if (is_file($path)) @unlink($path);
     }
   } catch (Throwable $e) {}
-  $pdo->prepare("DELETE FROM k_status WHERE id=? AND kal_id=?")->execute([$sid, $me['kal_id']]);
-  $pdo->prepare("DELETE FROM k_status_views WHERE status_id=?")->execute([$sid]);
+  $del = $pdo->prepare("DELETE FROM k_status WHERE id=? AND kal_id=?");
+  $del->execute([$sid, $me['kal_id']]);
+  // views go only with my own status (not someone else's by its number)
+  if ($del->rowCount() > 0) $pdo->prepare("DELETE FROM k_status_views WHERE status_id=?")->execute([$sid]);
   out(true, ['deleted'=>$sid]);
 }
 
@@ -1426,6 +1533,7 @@ function statusReact(PDO $pdo, array $in): void {
   $sid = (int)($in['status_id'] ?? 0);
   $emoji = substr(trim((string)($in['emoji'] ?? '❤')), 0, 8);
   if ($sid<=0) out(false,['error'=>'bad_input']);
+  if (!visibleStatus($pdo, $me['kal_id'], $sid)) out(false, ['error' => 'not_found']);
   // toggle: if same reaction exists remove it, else set
   $st=$pdo->prepare("SELECT emoji FROM k_status_reacts WHERE status_id=? AND reactor=?");
   $st->execute([$sid,$me['kal_id']]); $ex=$st->fetch();
@@ -1451,6 +1559,7 @@ function statusReact(PDO $pdo, array $in): void {
 function statusReactions(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
   $sid = (int)($in['status_id'] ?? 0);
+  if (!visibleStatus($pdo, $me['kal_id'], $sid)) out(true, ['reactions' => [], 'mine' => null, 'count' => 0]);
   $st=$pdo->prepare("SELECT r.emoji, r.reactor, u.username, u.name FROM k_status_reacts r
                      JOIN k_users u ON u.kal_id=r.reactor WHERE r.status_id=? ORDER BY r.created_at DESC");
   $st->execute([$sid]);
@@ -1461,14 +1570,16 @@ function statusReactions(PDO $pdo, array $in): void {
 
 function blockUser(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
-  $t = strtoupper(trim((string)($in['kal_id'] ?? '')));
+  // who to block is 'target' ('kal_id' is the caller, used by auth)
+  $t = strtoupper(trim((string)($in['target'] ?? '')));
+  if ($t === $me['kal_id']) out(false, ['error' => 'bad_id']);
   if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $t)) out(false, ['error' => 'bad_id']);
   $pdo->prepare('INSERT IGNORE INTO k_blocks (blocker, blocked, created_at) VALUES (?,?,NOW())')->execute([$me['kal_id'], $t]);
   out(true, ['blocked' => $t]);
 }
 function unblockUser(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
-  $t = strtoupper(trim((string)($in['kal_id'] ?? '')));
+  $t = strtoupper(trim((string)($in['target'] ?? '')));
   $pdo->prepare('DELETE FROM k_blocks WHERE blocker = ? AND blocked = ?')->execute([$me['kal_id'], $t]);
   out(true, ['unblocked' => $t]);
 }
@@ -1479,6 +1590,8 @@ function statusPost(PDO $pdo, array $in): void {
       ? $in['type'] : 'text';
   $payload = (string)($in['payload'] ?? '');
   if ($payload === '') out(false, ['error' => 'bad_input']);
+  // "file:" marks files this server stored itself - never from a client
+  if (str_starts_with($payload, 'file:')) out(false, ['error' => 'bad_input']);
 
   // Video (and anything large) is written to disk and only its URL is stored,
   // so the row stays small and the 1.5MB inline limit doesn't apply.
@@ -1599,8 +1712,12 @@ function groupCreate(PDO $pdo, array $in): void {
   $members = $in['members'] ?? [];
   if ($name === '' || mb_strlen($name) > 40 || !is_array($members)) out(false, ['error' => 'bad_input']);
   $gid = 'GRP-'.substr(bin2hex(random_bytes(6)),0,10);
-  $members[] = $me['kal_id'];
-  $members = array_values(array_unique(array_filter($members, fn($x)=>preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', (string)$x))));
+  // only my accepted contacts who haven't blocked me (groups must not get
+  // round contact requests and blocks)
+  $members = array_values(array_unique(array_filter(array_map('strval', $members),
+      fn($x) => preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $x) && mayAddToGroup($pdo, $me['kal_id'], $x))));
+  if (count($members) > 255) out(false, ['error' => 'group_full']);
+  array_unshift($members, $me['kal_id']);
   $pdo->prepare('INSERT INTO k_groups (gid, name, owner, members, created_at) VALUES (?,?,?,?,NOW())')
       ->execute([$gid, $name, $me['kal_id'], json_encode($members)]);
   out(true, ['gid' => $gid, 'name' => $name, 'members' => $members]);
@@ -1720,7 +1837,7 @@ function groupUpdate(PDO $pdo, array $in): void {
     foreach ($add as $m) {
       $m = (string)$m;
       if (preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $m)
-          && !in_array($m, $members, true)) {
+          && !in_array($m, $members, true) && mayAddToGroup($pdo, $me['kal_id'], $m)) {
         $members[] = $m;
       }
     }
@@ -1759,7 +1876,7 @@ function groupSend(PDO $pdo, array $in): void {
   $iv = (string)($in['iv'] ?? '');
   $blob = (string)($in['blob'] ?? '');
   $cid = substr((string)($in['client_id'] ?? ''), 0, 32);
-  if ($blob === '' || strlen($blob) > 16000000) out(false, ['error' => 'bad_input']);
+  if ($blob === '' || strlen($blob) > 16000000 || strlen($iv) > 64) out(false, ['error' => 'bad_input']);
   groupMigrate($pdo);
   $st = $pdo->prepare('SELECT * FROM k_groups WHERE gid = ?'); $st->execute([$gid]);
   $g = $st->fetch();
@@ -1771,8 +1888,11 @@ function groupSend(PDO $pdo, array $in): void {
   if ($v['settings']['send'] === 'admins' && !in_array($me['kal_id'], $v['admins'], true)) {
     out(false, ['error' => 'admins_only']);
   }
+  $blocked = $pdo->prepare('SELECT blocker FROM k_blocks WHERE blocked = ?');
+  $blocked->execute([$me['kal_id']]);
+  $blockedBy = array_column($blocked->fetchAll(), 'blocker');
   foreach ($members as $mm) {
-    if ($mm === $me['kal_id']) continue;
+    if ($mm === $me['kal_id'] || in_array($mm, $blockedBy, true)) continue;
     deliver($pdo, $mm, $me['kal_id'], $cid, $iv, $blob);
   }
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $gid, $cid, $iv, $blob);

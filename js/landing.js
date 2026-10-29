@@ -260,7 +260,7 @@ function showApp(){
   renderAll();
   startPoll();
   if(typeof refreshRequests==='function')refreshRequests();
-  if(typeof requestNotifPermission==='function')requestNotifPermission();
+  if(typeof askNotifyPermission==='function')askNotifyPermission();
   if(typeof registerFCM==='function')registerFCM();
   // signed up from an invite link → offer to connect now
   if(window._pendingInvite&&me()?.token){ const u=window._pendingInvite; window._pendingInvite=null; setTimeout(()=>showInvite(u),400); }

@@ -45,8 +45,8 @@ function voiceBubbleHTML(m){
   const wave=(m.wave||makeWave(3)).map(h=>`<i style="height:${h}px"></i>`).join('');
   const mm=Math.floor((m.dur||0)/60), ss=(m.dur||0)%60;
   return `<div class="voice-bub">
-    <button class="voice-play" onclick="playVoice('${m.id}',this)">▶</button>
-    <div class="voice-wave" data-wave="${m.id}">${wave}</div>
+    <button class="voice-play" onclick="playVoice('${esc(m.id)}',this)">▶</button>
+    <div class="voice-wave" data-wave="${esc(m.id)}">${wave}</div>
     <span class="voice-time">${mm}:${String(ss).padStart(2,'0')}</span>
   </div>`;
 }
@@ -54,6 +54,7 @@ let _curAudio=null;
 function playVoice(mid,btn){
   const ch=chat(curChat); const m=ch.msgs.find(x=>x.id===mid); if(!m||!m.audio)return;
   if(_curAudio){ _curAudio.pause(); _curAudio=null; document.querySelectorAll('.voice-play').forEach(b=>b.textContent='▶'); }
+  if(!safeData(m.audio))return;
   const a=new Audio(m.audio); _curAudio=a;
   btn.textContent='⏸';
   const bars=document.querySelectorAll(`[data-wave="${mid}"] i`);
