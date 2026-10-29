@@ -214,7 +214,7 @@
 .bx-sky{background:#DDEBFF}.bx-lilac{background:#F2E6FF}.bx-cream{background:#FFF1DC}
 .bx-green{background:#2BC46D;color:#06200F}
 .bx-row{flex-direction:row;align-items:center;gap:24px}
-.bx-row img{width:150px;border-radius:22px;border:6px solid #10140F;flex:none}
+.bx-row img{width:150px;height:auto;border-radius:22px;border:6px solid #10140F;flex:none}
 .bx-sec{margin-top:80px}
 .bx-h2{font-family:"Bricolage Grotesque",Inter,sans-serif;font-weight:800;font-size:44px;letter-spacing:-1.3px;line-height:1.05;margin:0}
 .bx-sub{color:var(--bx-soft);font-size:18px;margin:8px 0 26px}
@@ -285,3 +285,13 @@
   .store .st-t small{font-size:9.5px}
   .store .st-t b{font-size:15px}
 }
+/* homepage FAQ */
+.bx-faq{max-width:820px}
+.bx-faq details{background:#fff;border:1px solid #EFE4D3;border-radius:18px;padding:16px 20px;margin-bottom:10px}
+.bx-faq summary{cursor:pointer;font-weight:600;font-size:16px;list-style:none;display:flex;justify-content:space-between;gap:12px}
+.bx-faq summary::-webkit-details-marker{display:none}
+.bx-faq summary:after{content:"+";color:#0E6B47;font-size:20px;line-height:1}
+.bx-faq details[open] summary:after{content:"–"}
+.bx-faq p{margin:8px 0 0;font-size:14.5px;color:var(--bx-soft);line-height:1.55}
+@media (min-width:760px){.lp-foot-cols{grid-template-columns:1.4fr 1fr 1fr 1.2fr 1fr}}
+.bx-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
