@@ -778,7 +778,14 @@ function pruneMainCopies(PDO $pdo, string $kalId): void {
 function issueReceiptIfDone(PDO $pdo, string $to, string $from, string $cid, string $salt): string {
   $left = $pdo->prepare("SELECT 1 FROM k_queue WHERE to_id = ? AND from_id = ? AND client_id = ? AND peer = '' LIMIT 1");
   $left->execute([$to, $from, $cid]);
-  if ($left->fetch()) return '';
+  if ($left->fetch()) {
+    // Reached one of their devices (another, e.g. a closed browser, has yet
+    // to fetch its copy): tell the sender "delivered" now - an empty receipt.
+    // Waiting for every device left messages undelivered (red) for days.
+    $ins = $pdo->prepare("INSERT INTO k_receipts (to_id, dev, client_id, receipt, created_at) VALUES (?,?,?,'',NOW())");
+    foreach (deviceIds($pdo, $from) as $d) if ($d !== '#hold') $ins->execute([$from, $d, $cid]);
+    return '';
+  }
   $receipt = hash('sha256', $salt . '|' . $cid . '|' . microtime(true) . '|deleted');
   $ins = $pdo->prepare('INSERT INTO k_receipts (to_id, dev, client_id, receipt, created_at) VALUES (?,?,?,?,NOW())');
   foreach (deviceIds($pdo, $from) as $d) if ($d !== '#hold') $ins->execute([$from, $d, $cid, $receipt]);

@@ -180,7 +180,7 @@ async function pollOnce(){
   let changed=false;
   for(const r of res.receipts){ // relay deleted its copy of my sent message
     for(const cid in D().chats){ const m=D().chats[cid].msgs.find(x=>x.id===r.client_id);
-      if(m){ if(m.status==='sent'||m.status==='sending'||m.status==='failed')m.status='delivered'; m.receipt=r.receipt.slice(0,16); changed=true; } }
+      if(m){ if(m.status==='sent'||m.status==='sending'||m.status==='failed')m.status='delivered'; if(r.receipt)m.receipt=r.receipt.slice(0,16); changed=true; } }
   }
   for(const pkt of res.messages){
     // something I sent from my phone / another browser — show it here too
@@ -247,6 +247,8 @@ async function pollOnce(){
              audio:body.audio||null,wave:body.wave||null,dur:body.dur||0,
              ts:body.ts||pkt.ts,status:'read',burn:!!body.burn,replyTo:body.replyTo||null};
     if(body.timer)m.expireAt=now()+body.timer*1000;
+    // they're writing to me, so everything I sent them before has reached them
+    for(const x of ch.msgs) if(x.from==='me'&&x.status==='sent'&&x.ts<=m.ts) x.status='delivered';
     ch.msgs.push(m);
     const activeInThisChat = (curChat===c.id) && !document.hidden;
     if(activeInThisChat){ netSendCtl(c,{kind:'read',ids:[m.id]}); if(typeof clearPhoneAlerts==='function')clearPhoneAlerts(c); }
