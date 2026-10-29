@@ -434,6 +434,7 @@ function openChat(cid){
     const ids=ch.msgs.filter(x=>x.from==='them').slice(-30).map(x=>x.id);
     if(ids.length)netSendCtl(c,{kind:'read',ids});
   }
+  if(c.real)clearPhoneAlerts(c);
   ch.unread=0; save();
   $('chat-name').textContent=c.name;
   const av=$('chat-avatar'); av.textContent=initials(c.name); av.style.background=c.color; av.style.color='#141A2E';
@@ -752,6 +753,13 @@ function setTimerVal(v){
 }
 
 /* ---------- message menu / info ---------- */
+/* Read here: take this chat's notification off my phone(s) too (at most every 10 s per chat). */
+const _clearedAt={};
+function clearPhoneAlerts(c){
+  if(!c||!c.kalId||!me()?.token||Date.now()-(_clearedAt[c.kalId]||0)<10000)return;
+  _clearedAt[c.kalId]=Date.now();
+  api('notify_devices',{...authBody(),type:'clear',key:c.kalId}).catch(()=>{});
+}
 function openMsgMenu(mid){
   const ch=chat(curChat); const m=ch.msgs.find(x=>x.id===mid); if(!m||m.burned)return;
   const c=contact(curChat);

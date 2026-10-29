@@ -249,7 +249,7 @@ async function pollOnce(){
     if(body.timer)m.expireAt=now()+body.timer*1000;
     ch.msgs.push(m);
     const activeInThisChat = (curChat===c.id) && !document.hidden;
-    if(activeInThisChat){ netSendCtl(c,{kind:'read',ids:[m.id]}); }
+    if(activeInThisChat){ netSendCtl(c,{kind:'read',ids:[m.id]}); if(typeof clearPhoneAlerts==='function')clearPhoneAlerts(c); }
     else { ch.unread=(ch.unread||0)+1;
       if(typeof notifyIncoming==='function') notifyIncoming(c,m);
     }
