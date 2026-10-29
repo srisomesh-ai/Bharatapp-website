@@ -84,8 +84,16 @@ async function showViewers(sid){
   try{
     const r=await api('status_viewers',{...authBody(),status_id:sid});
     const list=r.viewers||[];
-    $('status-compose-body').innerHTML=`<h2>Viewed by ${list.length}</h2>`+
-      (list.length?list.map(v=>`<div class="prow"><span class="k">@${esc(v.username||'')} <span class="muted">${esc(v.name||'')}</span></span></div>`).join('')
+    const likes=list.filter(v=>v.emoji).length;
+    const when=ms=>{ if(!ms)return ''; const t=new Date(+ms), n=new Date();
+      const d0=new Date(t.getFullYear(),t.getMonth(),t.getDate()), n0=new Date(n.getFullYear(),n.getMonth(),n.getDate());
+      const clock=t.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}).toLowerCase();
+      const days=Math.round((n0-d0)/86400000);
+      return (days===0?'Today':days===1?'Yesterday':t.toLocaleDateString())+', '+clock; };
+    $('status-compose-body').innerHTML=`<h2 style="display:flex;align-items:center;gap:10px">Viewed by ${list.length}${likes?`<span style="margin-left:auto;font-size:13.5px;color:#E5484D;background:rgba(229,72,77,.12);padding:4px 10px;border-radius:99px">❤ ${likes}</span>`:''}</h2>`+
+      (list.length?list.map(v=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 2px">
+          <div style="position:relative">${v.avatar?`<img src="${esc(v.avatar)}" style="width:42px;height:42px;border-radius:50%;object-fit:cover">`:avatarHTML({name:v.name||v.username||'?',color:'#7FA8F5'},'')}${v.emoji?`<span style="position:absolute;right:-5px;bottom:-5px;font-size:14px;background:var(--panel);border-radius:50%;padding:1px 2px">${esc(v.emoji)}</span>`:''}</div>
+          <div style="min-width:0"><div style="font-weight:600">${esc(v.name||'@'+(v.username||''))}</div><div class="muted" style="font-size:13px">${when(v.at)}</div></div></div>`).join('')
         :'<div class="ps" style="padding:14px">No views yet.</div>');
     openSheet('sheet-status-compose');
   }catch(e){ toast('Could not load viewers'); }

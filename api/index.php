@@ -1381,10 +1381,22 @@ function statusViewers(PDO $pdo, array $in): void {
   $st = $pdo->prepare("SELECT kal_id FROM k_status WHERE id=?"); $st->execute([$sid]);
   $o = $st->fetch();
   if (!$o || $o['kal_id'] !== $me['kal_id']) out(false, ['error'=>'not_owner']);
-  $st = $pdo->prepare("SELECT v.viewer, v.created_at, u.username, u.name FROM k_status_views v
-                       JOIN k_users u ON u.kal_id=v.viewer WHERE v.status_id=? ORDER BY v.created_at DESC");
+  // when each person looked (ms, for the phone's own clock), their like, and
+  // their photo where their privacy lets me see it
+  $st = $pdo->prepare("SELECT v.viewer, v.created_at, UNIX_TIMESTAMP(v.created_at) * 1000 AS at,
+                         u.username, u.name, u.avatar, r.emoji
+                       FROM k_status_views v
+                       JOIN k_users u ON u.kal_id = v.viewer
+                       LEFT JOIN k_status_reacts r ON r.status_id = v.status_id AND r.reactor = v.viewer
+                       WHERE v.status_id = ? ORDER BY v.created_at DESC");
   $st->execute([$sid]);
-  out(true, ['viewers' => $st->fetchAll()]);
+  $rows = $st->fetchAll();
+  foreach ($rows as &$r) {
+    $r['at'] = (int)$r['at'];
+    if (!empty($r['avatar']) && !allowedBy($pdo, $r['viewer'], 'photo', $me['kal_id'])) $r['avatar'] = null;
+  }
+  unset($r);
+  out(true, ['viewers' => $rows]);
 }
 function statusDelete(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
@@ -1419,7 +1431,17 @@ function statusReact(PDO $pdo, array $in): void {
   $pdo->prepare("INSERT INTO k_status_reacts (status_id,reactor,emoji,created_at) VALUES (?,?,?,NOW())
                  ON DUPLICATE KEY UPDATE emoji=VALUES(emoji), created_at=NOW()")
       ->execute([$sid,$me['kal_id'],$emoji]);
-  out(true,['toggled'=>'on','emoji'=>$emoji]);
+  answerNow(['toggled'=>'on','emoji'=>$emoji]);
+  // tell the owner (once per person per status - changing the emoji doesn't ring again)
+  $st = $pdo->prepare('SELECT kal_id FROM k_status WHERE id = ?'); $st->execute([$sid]);
+  $owner = (string)$st->fetchColumn();
+  if ($owner !== '' && $owner !== $me['kal_id'] && !$ex) {
+    $u = $pdo->prepare('SELECT name, username FROM k_users WHERE kal_id = ?'); $u->execute([$me['kal_id']]);
+    $who = $u->fetch();
+    $nm = $who ? ((string)($who['name'] ?: '@' . $who['username'])) : 'Someone';
+    sendPush($pdo, $owner, $nm, 'liked your status ' . $emoji, $me['kal_id'], 'status_like');
+  }
+  exit;
 }
 function statusReactions(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
