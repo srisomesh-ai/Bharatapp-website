@@ -23,10 +23,10 @@ function showInvite(u){
   const signedIn=!!(S&&S.identities&&S.identities.length&&me()?.token);
   kConfirm({title:'Chat with @'+u+' on BharatApp Chat',
     message:signedIn?'Send @'+u+' a contact request? You can chat once they accept.'
-                    :'Get the BharatApp Chat app to connect with @'+u+', or create an account here in your browser.',
-    okText:signedIn?'Connect':'Get it on Google Play', cancelText:signedIn?'Not now':'Use in browser'})
+                    :'Get the BharatApp Chat app to connect with @'+u+'. Already have it? Log in here with the QR code.',
+    okText:signedIn?'Connect':'Get it on Google Play', cancelText:signedIn?'Not now':'Log in with QR'})
   .then(async ok=>{
-    if(!signedIn){ if(ok){ location.href=PLAY_URL; } else { window._pendingInvite=u; landStart(); } return; }
+    if(!signedIn){ if(ok){ location.href=PLAY_URL; } else { window._pendingInvite=u; showLogin(); } return; }
     if(!ok)return;
     try{ const c=await connectReal(u); await api('req_send',{...authBody(),to:c.kalId}); toast('Request sent to @'+u); }
     catch(e){ toast(e.message==='not_found'?'No user found with @'+u:'Could not connect'); }
@@ -67,11 +67,13 @@ function bootRoute(){
    The browser's Back button does the same: entering sign-up or log-in adds
    a history entry, and going back to it shows the home page again. */
 function goHome(){
+  if(typeof qrStop==='function')qrStop();
   if(history.state&&history.state.kscr){ history.back(); return; }
   showLanding();
 }
 function showLanding(){
   if(isNativeApp())return;           // the app has no home page
+  if(typeof qrStop==='function')qrStop();
   document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
   $('scr-landing').classList.add('on');
 }
@@ -89,6 +91,8 @@ window.addEventListener('popstate',()=>{
 });
 
 function landStart(fromHistory){
+  // accounts are made in the phone app only; the web shows the QR to log in
+  if(!DESK&&!isNativeApp()){ showLogin(fromHistory); return; }
   if(fromHistory!==true)_pushScreen('signup');
   // go to onboarding (create account)
   document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
@@ -131,9 +135,9 @@ function lpClaim(){
   const v=$('lp-user').value;
   if(!v){ $('lp-user').focus(); _lpStatus('Type the username you want','bad'); return; }
   if(_lpOk!==v){ lpCheck(); return; }
-  landStart();
-  const u=$('ob-user'); if(u){ u.value=v; u.dispatchEvent(new Event('input',{bubbles:true})); }
-  setTimeout(()=>$('ob-name')?.focus(),250);
+  // accounts are made in the app: take them to Google Play
+  kConfirm({title:'@'+v+' is free!',message:'Create your BharatApp Chat ID in the app — it takes a minute. Then scan the QR here to use it on your computer too.',
+    okText:'Get it on Google Play',cancelText:'Not now'}).then(ok=>{ if(ok)location.href=PLAY_URL; });
 }
 
 /* ---- log in: @username + password. A new browser is asked once for a code
@@ -143,7 +147,15 @@ function showLogin(fromHistory){
   document.querySelectorAll('.scr').forEach(x=>x.classList.remove('on'));
   $('scr-onboard').classList.add('on');
   $('ob-step1').classList.add('hide'); $('ob-step2').classList.add('hide');
-  $('ob-login').classList.remove('hide'); $('ob-forgot').classList.add('hide');
+  $('ob-forgot').classList.add('hide');
+  // the web logs in only by scanning a QR with the phone app (like WhatsApp
+  // Web); accounts are made in the app. The support desk keeps its password.
+  if(!DESK&&!isNativeApp()){
+    $('ob-login').classList.add('hide'); $('ob-qr').classList.remove('hide');
+    qrStart(); return;
+  }
+  $('ob-qr').classList.add('hide');
+  $('ob-login').classList.remove('hide');
   $('lg-step2').classList.add('hide'); $('lg-code').value=''; lgMsg('');
   setTimeout(()=>$('lg-user')?.focus(),200);
 }

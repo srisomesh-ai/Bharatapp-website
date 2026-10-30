@@ -117,6 +117,7 @@ tbody tr:hover td{background:#FFFBF4}
       <button class="tabb" id="tab-slides" onclick="showTab('slides')">Screenshots</button>
       <button class="tabb" id="tab-support" onclick="showTab('support')">Support chats</button>
       <button class="tabb" id="tab-rtc" onclick="showTab('rtc')">Call relay</button>
+      <button class="tabb" id="tab-push" onclick="showTab('push')">Notifications</button>
     </div>
 
     <div id="view-users">
@@ -167,6 +168,15 @@ tbody tr:hover td{background:#FFFBF4}
       <div id="sup-desk" style="display:none">
         <p class="muted" style="margin:4px 0 10px">Chats people send to <b>@support</b>. Sign in once with the support password; this browser stays signed in. You also get an email when someone writes in. <a href="/?desk=1" target="_blank" rel="noopener">Open in a new tab ↗</a></p>
         <iframe id="sup-frame" title="Support chats" style="width:100%;height:78vh;border:1px solid var(--line);border-radius:18px;background:#fff"></iframe>
+      </div>
+    </div>
+    <div id="view-push" style="display:none">
+      <div class="newuser">
+        <p><b>Notifications</b> — what the server sent to phones and what Google answered.</p>
+        <p class="muted" id="push-sum">Loading…</p>
+        <p class="muted" style="font-size:13px">"Delivered to Google" means Google accepted it; the phone then wakes up unless its battery settings block BharatApp Chat. "Not sent" usually means the person's phone isn't registered (they haven't opened the new app yet).</p>
+        <div style="overflow-x:auto"><table><thead><tr><th>When</th><th>To</th><th>Type</th><th>Result</th></tr></thead><tbody id="push-rows"></tbody></table></div>
+        <button class="btn sm" style="margin-top:8px" onclick="loadPush()">Refresh</button>
       </div>
     </div>
     <div id="view-rtc" style="display:none">
@@ -356,9 +366,20 @@ function showTab(t){
   if(t==='slides')loadSlides();
   if(t==='support')loadSupport();
   if(t==='rtc')loadRtc();
-  for(const k of ['users','groups','trace','slides','support','rtc']){
+  if(t==='push')loadPush();
+  for(const k of ['users','groups','trace','slides','support','rtc','push']){
     $('tab-'+k).classList.toggle('on',t===k); $('view-'+k).style.display=t===k?'block':'none';
   }
+}
+async function loadPush(){
+  try{
+    const r=await call('push_log',{});
+    const ok=r.summary.find(x=>+x.http===200)?.n||0, all=r.summary.reduce((a,x)=>a+(+x.n),0);
+    const label=h=>+h===200?'<span class="pill on">Delivered to Google</span>':+h===0?'<span class="pill off">Not sent</span>':'<span class="pill off">Refused ('+esc(h)+')</span>';
+    $('push-sum').innerHTML=`<b>${r.phones}</b> people have a phone registered for notifications · last 24 h: <b>${ok}</b> of <b>${all}</b> notifications accepted by Google`;
+    $('push-rows').innerHTML=r.rows.length?r.rows.map(x=>`<tr><td class="muted">${esc(x.created_at)}</td><td>${x.username?'@'+esc(x.username):'<span class="muted">?</span>'}</td><td>${esc(x.type)}</td><td>${label(x.http)}<div class="muted" style="font-size:12px">${esc(x.err||'')}</div></td></tr>`).join('')
+      :'<tr><td colspan="4" class="muted">No notifications sent yet.</td></tr>';
+  }catch(e){ toast(e.message); }
 }
 async function loadRtc(){
   try{ const r=await call('rtc',{}); $('rtc-line').value=r.line;

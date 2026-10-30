@@ -328,6 +328,14 @@ function handleGroupIncoming(gb){
     if(!g.members.includes(gb.fromKal))g.members.push(gb.fromKal); }
   const ch=chat(g.id);
   if(ch.msgs.some(x=>x.id===gb.cid))return; // dedup
+  if(gb.kind==='left'){ // a member left: "Asha left", and off the list
+    const who=gb.fromKal||gb.from;
+    const i=(g.members||[]).indexOf(who); if(i<0)return;
+    g.members.splice(i,1);
+    ch.msgs.push({id:safeMid(gb.cid),from:'them',kind:'sys',text:(gb.fromName||'Someone')+' left',ts:gb.ts||now(),status:'read'});
+    save(); if(curChat===g.id)renderMsgs(true); else renderChats();
+    return;
+  }
   if(!['text','img','voice','file'].includes(gb.kind||'text'))return;
   const m={id:safeMid(gb.cid),from:'them',senderName:gb.fromName||'',kind:gb.kind||'text',text:gb.text||'',
            img:safeData(gb.img),audio:safeData(gb.audio),file:safeData(gb.file),fileName:gb.fileName||null,fileSize:gb.fileSize||null,

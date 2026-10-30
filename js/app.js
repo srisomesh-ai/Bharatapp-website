@@ -531,7 +531,10 @@ async function deleteChat(cid){
   closeSheets();
   if(c.isGroup){
     if(!await kConfirm({title:'Exit and delete '+name+'?',message:'You will leave the group and its messages will be removed from this browser.',okText:'Exit and delete',danger:true}))return;
-    // leave on the server first, or the group comes back with its next message
+    // tell the others ("<me> left"), then leave on the server - first, or
+    // the group comes back with its next message
+    try{ if(c.gkey){ const cid=uid(); const enc=await gEncrypt(c.gkey,{kind:'left',gid:c.kalId,from:me().kalId,fromName:me().name,cid,ts:now()});
+      await api('group_send',{...authBody(),gid:c.kalId,client_id:cid,...enc}); } }catch(e){}
     try{ await api('group_update',{...authBody(),gid:c.kalId,act:'leave'}); }
     catch(e){ if(e.message!=='group_not_found'&&e.message!=='not_a_member'){ toast('Could not leave the group — please try again'); return; } }
     D().leftGroups=D().leftGroups||[]; if(!D().leftGroups.includes(c.kalId))D().leftGroups.push(c.kalId);
@@ -639,6 +642,7 @@ function reactionChips(m){
   return `<div class="msg-reacts">${set.map(e=>`<span>${esc(e)}</span>`).join('')}</div>`;
 }
 function msgHTML(m,c){
+  if(m.kind==='sys') return `<div class="daychip">${esc(m.text)}</div>`;   // "Asha left"
   const side=m.from==='me'?'mine':'theirs';
   if(m.burned) return `<div class="brow ${side}"><div class="bub"><div class="burned-stub">🔥 ${m.from==='me'?'Burned after being read':'This message was burned'}</div></div></div>`;
   let inner='';

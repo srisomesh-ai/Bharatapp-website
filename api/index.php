@@ -61,6 +61,9 @@ try {
     case 'fcm_register':  fcmRegister($pdo, $in); break;
     case 'fcm_unregister': fcmUnregister($pdo, $in); break;
     case 'fetch_ack':     fetchAck($pdo, $in); break;
+    case 'qr_start':      qrStart($pdo, $in); break;
+    case 'qr_poll':       qrPoll($pdo, $in); break;
+    case 'qr_approve':    qrApprove($pdo, $in); break;
     case 'notify_devices': notifyDevices($pdo, $in); break;
     case 'privacy_get':   privacyGet($pdo, $in); break;
     case 'privacy_set':   privacySet($pdo, $in); break;
@@ -276,7 +279,9 @@ function fetchMsgs(PDO $pdo, array $in): void {
   $st = $pdo->prepare('SELECT id, LENGTH(payload) AS n FROM k_queue WHERE to_id = ? AND dev = ? ORDER BY id ASC LIMIT 100');
   $st->execute([$me['kal_id'], $me['dev']]);
   $heads = $st->fetchAll();
-  $one = $pdo->prepare('SELECT * FROM k_queue WHERE id = ?');
+  // age is worked out by the database (its clock and PHP's can be in
+  // different time zones) - the app uses it to tell a missed call
+  $one = $pdo->prepare('SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age_s FROM k_queue WHERE id = ?');
   $take = $pdo->prepare('DELETE FROM k_queue WHERE id = ?');
   // Newer apps (v2) confirm with fetch_ack once a message is saved on the
   // phone; only then is the server's copy deleted. A download cut off by a
@@ -294,7 +299,7 @@ function fetchMsgs(PDO $pdo, array $in): void {
     if (!$r) continue;
     if ($v2) {
       // handed out, kept until acknowledged (qid = what to acknowledge)
-      $row = ['qid' => (int)$r['id'], 'from' => $r['from_id'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000, 'cid' => $r['client_id']];
+      $row = ['qid' => (int)$r['id'], 'from' => $r['from_id'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000, 'cid' => $r['client_id'], 'age' => max(0, (int)$r['age_s'])];
       if ($r['peer'] !== '') $row['to'] = $r['peer'];
       $out['messages'][] = $row;
       continue;
@@ -770,6 +775,81 @@ function deviceList(PDO $pdo, array $in): void {
 }
 
 /* Log a device out — your own, or another of yours by id. */
+/* ---------------- QR login (like WhatsApp Web) ----------------
+   The browser makes a one-time key pair and shows a QR with its public key.
+   The phone scans it, encrypts the account's keys to that public key and
+   approves; the server makes a new device login and passes the sealed keys
+   on. Only that browser (which holds the secret it started with) collects
+   them, once, within 3 minutes. The server never sees the account's keys. */
+/* At most $max calls of $what per address in $secs seconds. */
+function rateLimited(PDO $pdo, string $what, int $max, int $secs): bool {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_rate (what VARCHAR(20) NOT NULL, ip VARCHAR(45) NOT NULL,
+    at DATETIME NOT NULL, KEY w (what, ip, at)) ENGINE=InnoDB");
+  $ip = substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
+  if (random_int(1, 50) === 1) $pdo->exec("DELETE FROM k_rate WHERE at < (NOW() - INTERVAL 1 DAY)");
+  $st = $pdo->prepare('SELECT COUNT(*) FROM k_rate WHERE what = ? AND ip = ? AND at > (NOW() - INTERVAL ? SECOND)');
+  $st->execute([$what, $ip, $secs]);
+  if ((int)$st->fetchColumn() >= $max) return true;
+  $pdo->prepare('INSERT INTO k_rate (what, ip, at) VALUES (?,?,NOW())')->execute([$what, $ip]);
+  return false;
+}
+function qrMigrate(PDO $pdo): void {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_qr (
+    pid VARCHAR(32) PRIMARY KEY, secret CHAR(64) NOT NULL, web_pub TEXT NOT NULL,
+    created_at DATETIME NOT NULL, kal_id VARCHAR(20) NULL, session MEDIUMTEXT NULL,
+    sealed MEDIUMTEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+function qrStart(PDO $pdo, array $in): void {
+  qrMigrate($pdo);
+  $pub = $in['web_pub'] ?? null;
+  $secret = (string)($in['secret'] ?? '');
+  if (!is_array($pub) || !preg_match('/^[A-Za-z0-9_-]{40,50}$/', (string)($pub['x'] ?? ''))
+      || !preg_match('/^[A-Za-z0-9_-]{40,50}$/', (string)($pub['y'] ?? ''))
+      || strlen($secret) < 32 || strlen($secret) > 128) out(false, ['error' => 'bad_input']);
+  if (rateLimited($pdo, 'qr_start', 30, 600)) out(false, ['error' => 'too_many']);
+  if (random_int(1, 20) === 1) $pdo->exec("DELETE FROM k_qr WHERE created_at < (NOW() - INTERVAL 10 MINUTE)");
+  $pid = rtrim(strtr(base64_encode(random_bytes(16)), '+/', '-_'), '=');
+  $pdo->prepare('INSERT INTO k_qr (pid, secret, web_pub, created_at) VALUES (?,?,?,NOW())')
+      ->execute([$pid, hash('sha256', $secret), json_encode(['x' => $pub['x'], 'y' => $pub['y']])]);
+  out(true, ['pid' => $pid, 'ttl' => 180]);
+}
+function qrPoll(PDO $pdo, array $in): void {
+  qrMigrate($pdo);
+  $st = $pdo->prepare('SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age FROM k_qr WHERE pid = ?');
+  $st->execute([(string)($in['pid'] ?? '')]);
+  $r = $st->fetch();
+  if (!$r || !hash_equals($r['secret'], hash('sha256', (string)($in['secret'] ?? '')))) out(false, ['error' => 'expired']);
+  if ($r['session'] === null) {
+    if ((int)$r['age'] > 180) { $pdo->prepare('DELETE FROM k_qr WHERE pid = ?')->execute([$r['pid']]); out(false, ['error' => 'expired']); }
+    out(true, ['status' => 'waiting']);
+  }
+  // collected once
+  $pdo->prepare('DELETE FROM k_qr WHERE pid = ?')->execute([$r['pid']]);
+  out(true, ['status' => 'approved', 'session' => json_decode($r['session'], true),
+             'sealed' => json_decode($r['sealed'], true)]);
+}
+function qrApprove(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  qrMigrate($pdo);
+  $sealed = $in['sealed'] ?? null;
+  if (!is_array($sealed) || empty($sealed['iv']) || empty($sealed['blob']) || !is_array($sealed['pub'] ?? null)
+      || strlen((string)$sealed['blob']) > 20000) out(false, ['error' => 'bad_input']);
+  $st = $pdo->prepare('SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age FROM k_qr WHERE pid = ?');
+  $st->execute([(string)($in['pid'] ?? '')]);
+  $r = $st->fetch();
+  if (!$r || (int)$r['age'] > 180) out(false, ['error' => 'expired']);
+  if ($r['session'] !== null) out(false, ['error' => 'already_used']);
+  $u = $pdo->prepare('SELECT * FROM k_users WHERE kal_id = ?'); $u->execute([$me['kal_id']]);
+  $user = $u->fetch();
+  if (!$user) out(false, ['error' => 'auth_failed']);
+  $session = newDeviceSession($pdo, $user, mb_substr(trim((string)($in['device'] ?? 'Browser')), 0, 40));
+  $pdo->prepare('UPDATE k_qr SET kal_id = ?, session = ?, sealed = ? WHERE pid = ? AND session IS NULL')
+      ->execute([$me['kal_id'], json_encode($session), json_encode([
+        'iv' => (string)$sealed['iv'], 'blob' => (string)$sealed['blob'],
+        'pub' => ['x' => (string)($sealed['pub']['x'] ?? ''), 'y' => (string)($sealed['pub']['y'] ?? '')]]), $r['pid']]);
+  out(true, ['linked' => true]);
+}
+
 /* Logging out on a phone: it stops getting this account's notifications. */
 function fcmUnregister(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
@@ -1129,7 +1209,18 @@ function reqSend(PDO $pdo, array $in): void {
     out(true, ['already'=>$ex['status']]);
   }
   $pdo->prepare("INSERT INTO k_contacts (a,b,status,created_at) VALUES (?,?,'pending',NOW())")->execute([$me['kal_id'],$to]);
-  out(true, ['sent' => true]);
+  answerNow(['sent' => true]);
+  // ring their phone: "@asha wants to connect"
+  sendPush($pdo, $to, displayName($pdo, $me['kal_id']), 'wants to connect with you', $me['kal_id'], 'request');
+  exit;
+}
+/* "Asha (@asha7)" for notifications */
+function displayName(PDO $pdo, string $kal): string {
+  $u = $pdo->prepare('SELECT name, username FROM k_users WHERE kal_id = ?'); $u->execute([$kal]);
+  $r = $u->fetch();
+  if (!$r) return 'Someone';
+  $nm = trim((string)$r['name']);
+  return $nm !== '' ? $nm . ($r['username'] ? ' (@' . $r['username'] . ')' : '') : '@' . $r['username'];
 }
 function reqList(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
@@ -1145,7 +1236,13 @@ function reqAct(PDO $pdo, array $in): void {
   $from = strtoupper(trim((string)($in['from'] ?? '')));
   $act = ($in['act'] ?? '') === 'accept' ? 'accept' : 'reject';
   if ($act === 'accept') {
-    $pdo->prepare("UPDATE k_contacts SET status='accepted' WHERE a=? AND b=?")->execute([$from,$me['kal_id']]);
+    $up = $pdo->prepare("UPDATE k_contacts SET status='accepted' WHERE a=? AND b=? AND status='pending'");
+    $up->execute([$from,$me['kal_id']]);
+    if ($up->rowCount() > 0) {
+      answerNow(['ok'=>true, 'act'=>$act]);
+      sendPush($pdo, $from, displayName($pdo, $me['kal_id']), 'accepted your request — say hi!', $me['kal_id'], 'request');
+      exit;
+    }
   } else {
     $pdo->prepare("DELETE FROM k_contacts WHERE a=? AND b=?")->execute([$from,$me['kal_id']]);
   }
@@ -1238,9 +1335,9 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
       $st = $pdo->prepare("SELECT token, '' AS caps FROM k_fcm WHERE kal_id=?"); $st->execute([$toKal]);
     }
     $rows = $st->fetchAll();
-    if (!$rows) return $report ? ['ok'=>false,'why'=>'no_device_registered'] : null;
+    if (!$rows) { pushLog($pdo, $toKal, $type, 0, 'no phone registered for notifications', ''); return $report ? ['ok'=>false,'why'=>'no_device_registered'] : null; }
     $access = fcmAccessToken();
-    if (!$access) return $report ? ['ok'=>false,'why'=>'google_auth_failed'] : null;
+    if (!$access) { pushLog($pdo, $toKal, $type, 0, 'server could not sign in to Google (fcm key)', ''); return $report ? ['ok'=>false,'why'=>'google_auth_failed'] : null; }
     $project = defined('FCM_PROJECT_ID') ? FCM_PROJECT_ID : ($sa['project_id'] ?? '');
     if ($project === '') return $report ? ['ok'=>false,'why'=>'no_project_id'] : null;
     $url = 'https://fcm.googleapis.com/v1/projects/'.$project.'/messages:send';
@@ -1299,6 +1396,7 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
       }
       $results[] = ['http'=>$code, 'error'=>$err ?: null,
                     'body'=>$code >= 300 ? substr((string)$resp, 0, 300) : null];
+      pushLog($pdo, $toKal, $type, $code, $err ?: ($code >= 300 ? substr((string)$resp, 0, 200) : ''), substr($t, -8));
     }
     if ($report) {
       return ['ok' => !empty($results) && ($results[0]['http'] ?? 0) === 200,
@@ -1308,6 +1406,18 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
     if ($report) return ['ok'=>false,'why'=>'exception','detail'=>$e->getMessage()];
   }
   return $report ? ['ok'=>false,'why'=>'no_attempts'] : null;
+}
+
+/* Every push and what Google answered, for the admin panel (Notifications). */
+function pushLog(PDO $pdo, string $kal, string $type, int $code, string $err, string $tok): void {
+  try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS k_push_log (id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      kal_id VARCHAR(20), type VARCHAR(20), http INT, err VARCHAR(200), tok VARCHAR(8), created_at DATETIME,
+      KEY k (kal_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->prepare('INSERT INTO k_push_log (kal_id, type, http, err, tok, created_at) VALUES (?,?,?,?,?,NOW())')
+        ->execute([$kal, $type, $code, $err, $tok]);
+    if (random_int(1, 100) === 1) $pdo->exec("DELETE FROM k_push_log WHERE created_at < (NOW() - INTERVAL 3 DAY)");
+  } catch (Throwable $e) {}
 }
 
 /* Tell my other devices something happened here: a chat was read (clear its

@@ -43,6 +43,7 @@ try {
     case 'slide_del':    slideDel($in); break;
     case 'list_groups':  listGroups($pdo); break;
     case 'rtc':          adminRtc($pdo); break;
+    case 'push_log':     pushLogList($pdo); break;
     case 'trace':        traceForward($pdo, $in); break;
     case 'wipe_all':     wipeAll($pdo); break;
     case 'logout':       $pdo->prepare('DELETE FROM k_admin_sessions WHERE token = ?')->execute([$in['token'] ?? '']); out(true, ['bye'=>1]); break;
@@ -278,6 +279,19 @@ function traceForward(PDO $pdo, array $in): void {
 }
 
 /* Call relay: the secret the VPS setup line carries, and what the VPS last reported. */
+/* The last notifications the server sent and what Google answered. */
+function pushLogList(PDO $pdo): void {
+  try {
+    $rows = $pdo->query("SELECT p.created_at, p.type, p.http, p.err, p.tok, u.username, u.name
+                         FROM k_push_log p LEFT JOIN k_users u ON u.kal_id = p.kal_id
+                         ORDER BY p.id DESC LIMIT 200")->fetchAll();
+    $sum = $pdo->query("SELECT http, COUNT(*) AS n FROM k_push_log WHERE created_at > (NOW() - INTERVAL 1 DAY)
+                        GROUP BY http ORDER BY n DESC")->fetchAll();
+    $phones = (int)$pdo->query("SELECT COUNT(DISTINCT kal_id) FROM k_fcm")->fetchColumn();
+  } catch (Throwable $e) { $rows = []; $sum = []; $phones = 0; }
+  out(true, ['rows' => $rows, 'summary' => $sum, 'phones' => $phones]);
+}
+
 function adminRtc(PDO $pdo): void {
   $pdo->exec("CREATE TABLE IF NOT EXISTS k_settings (k VARCHAR(40) PRIMARY KEY, v TEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   $get = function (string $k) use ($pdo) { $st = $pdo->prepare('SELECT v FROM k_settings WHERE k = ?'); $st->execute([$k]); $v = $st->fetchColumn(); return $v === false ? null : $v; };
