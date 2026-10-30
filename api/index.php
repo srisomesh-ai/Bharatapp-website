@@ -276,7 +276,9 @@ function fetchMsgs(PDO $pdo, array $in): void {
   $st = $pdo->prepare('SELECT id, LENGTH(payload) AS n FROM k_queue WHERE to_id = ? AND dev = ? ORDER BY id ASC LIMIT 100');
   $st->execute([$me['kal_id'], $me['dev']]);
   $heads = $st->fetchAll();
-  $one = $pdo->prepare('SELECT * FROM k_queue WHERE id = ?');
+  // age is worked out by the database (its clock and PHP's can be in
+  // different time zones) - the app uses it to tell a missed call
+  $one = $pdo->prepare('SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age_s FROM k_queue WHERE id = ?');
   $take = $pdo->prepare('DELETE FROM k_queue WHERE id = ?');
   // Newer apps (v2) confirm with fetch_ack once a message is saved on the
   // phone; only then is the server's copy deleted. A download cut off by a
@@ -294,7 +296,7 @@ function fetchMsgs(PDO $pdo, array $in): void {
     if (!$r) continue;
     if ($v2) {
       // handed out, kept until acknowledged (qid = what to acknowledge)
-      $row = ['qid' => (int)$r['id'], 'from' => $r['from_id'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000, 'cid' => $r['client_id']];
+      $row = ['qid' => (int)$r['id'], 'from' => $r['from_id'], 'iv' => $r['iv'], 'blob' => $r['payload'], 'ts' => strtotime($r['created_at']) * 1000, 'cid' => $r['client_id'], 'age' => max(0, (int)$r['age_s'])];
       if ($r['peer'] !== '') $row['to'] = $r['peer'];
       $out['messages'][] = $row;
       continue;
