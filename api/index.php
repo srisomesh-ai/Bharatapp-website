@@ -61,6 +61,9 @@ try {
     case 'fcm_register':  fcmRegister($pdo, $in); break;
     case 'fcm_unregister': fcmUnregister($pdo, $in); break;
     case 'fetch_ack':     fetchAck($pdo, $in); break;
+    case 'qr_start':      qrStart($pdo, $in); break;
+    case 'qr_poll':       qrPoll($pdo, $in); break;
+    case 'qr_approve':    qrApprove($pdo, $in); break;
     case 'notify_devices': notifyDevices($pdo, $in); break;
     case 'privacy_get':   privacyGet($pdo, $in); break;
     case 'privacy_set':   privacySet($pdo, $in); break;
@@ -772,6 +775,81 @@ function deviceList(PDO $pdo, array $in): void {
 }
 
 /* Log a device out — your own, or another of yours by id. */
+/* ---------------- QR login (like WhatsApp Web) ----------------
+   The browser makes a one-time key pair and shows a QR with its public key.
+   The phone scans it, encrypts the account's keys to that public key and
+   approves; the server makes a new device login and passes the sealed keys
+   on. Only that browser (which holds the secret it started with) collects
+   them, once, within 3 minutes. The server never sees the account's keys. */
+/* At most $max calls of $what per address in $secs seconds. */
+function rateLimited(PDO $pdo, string $what, int $max, int $secs): bool {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_rate (what VARCHAR(20) NOT NULL, ip VARCHAR(45) NOT NULL,
+    at DATETIME NOT NULL, KEY w (what, ip, at)) ENGINE=InnoDB");
+  $ip = substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
+  if (random_int(1, 50) === 1) $pdo->exec("DELETE FROM k_rate WHERE at < (NOW() - INTERVAL 1 DAY)");
+  $st = $pdo->prepare('SELECT COUNT(*) FROM k_rate WHERE what = ? AND ip = ? AND at > (NOW() - INTERVAL ? SECOND)');
+  $st->execute([$what, $ip, $secs]);
+  if ((int)$st->fetchColumn() >= $max) return true;
+  $pdo->prepare('INSERT INTO k_rate (what, ip, at) VALUES (?,?,NOW())')->execute([$what, $ip]);
+  return false;
+}
+function qrMigrate(PDO $pdo): void {
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_qr (
+    pid VARCHAR(32) PRIMARY KEY, secret CHAR(64) NOT NULL, web_pub TEXT NOT NULL,
+    created_at DATETIME NOT NULL, kal_id VARCHAR(20) NULL, session MEDIUMTEXT NULL,
+    sealed MEDIUMTEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+function qrStart(PDO $pdo, array $in): void {
+  qrMigrate($pdo);
+  $pub = $in['web_pub'] ?? null;
+  $secret = (string)($in['secret'] ?? '');
+  if (!is_array($pub) || !preg_match('/^[A-Za-z0-9_-]{40,50}$/', (string)($pub['x'] ?? ''))
+      || !preg_match('/^[A-Za-z0-9_-]{40,50}$/', (string)($pub['y'] ?? ''))
+      || strlen($secret) < 32 || strlen($secret) > 128) out(false, ['error' => 'bad_input']);
+  if (rateLimited($pdo, 'qr_start', 30, 600)) out(false, ['error' => 'too_many']);
+  if (random_int(1, 20) === 1) $pdo->exec("DELETE FROM k_qr WHERE created_at < (NOW() - INTERVAL 10 MINUTE)");
+  $pid = rtrim(strtr(base64_encode(random_bytes(16)), '+/', '-_'), '=');
+  $pdo->prepare('INSERT INTO k_qr (pid, secret, web_pub, created_at) VALUES (?,?,?,NOW())')
+      ->execute([$pid, hash('sha256', $secret), json_encode(['x' => $pub['x'], 'y' => $pub['y']])]);
+  out(true, ['pid' => $pid, 'ttl' => 180]);
+}
+function qrPoll(PDO $pdo, array $in): void {
+  qrMigrate($pdo);
+  $st = $pdo->prepare('SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age FROM k_qr WHERE pid = ?');
+  $st->execute([(string)($in['pid'] ?? '')]);
+  $r = $st->fetch();
+  if (!$r || !hash_equals($r['secret'], hash('sha256', (string)($in['secret'] ?? '')))) out(false, ['error' => 'expired']);
+  if ($r['session'] === null) {
+    if ((int)$r['age'] > 180) { $pdo->prepare('DELETE FROM k_qr WHERE pid = ?')->execute([$r['pid']]); out(false, ['error' => 'expired']); }
+    out(true, ['status' => 'waiting']);
+  }
+  // collected once
+  $pdo->prepare('DELETE FROM k_qr WHERE pid = ?')->execute([$r['pid']]);
+  out(true, ['status' => 'approved', 'session' => json_decode($r['session'], true),
+             'sealed' => json_decode($r['sealed'], true)]);
+}
+function qrApprove(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  qrMigrate($pdo);
+  $sealed = $in['sealed'] ?? null;
+  if (!is_array($sealed) || empty($sealed['iv']) || empty($sealed['blob']) || !is_array($sealed['pub'] ?? null)
+      || strlen((string)$sealed['blob']) > 20000) out(false, ['error' => 'bad_input']);
+  $st = $pdo->prepare('SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age FROM k_qr WHERE pid = ?');
+  $st->execute([(string)($in['pid'] ?? '')]);
+  $r = $st->fetch();
+  if (!$r || (int)$r['age'] > 180) out(false, ['error' => 'expired']);
+  if ($r['session'] !== null) out(false, ['error' => 'already_used']);
+  $u = $pdo->prepare('SELECT * FROM k_users WHERE kal_id = ?'); $u->execute([$me['kal_id']]);
+  $user = $u->fetch();
+  if (!$user) out(false, ['error' => 'auth_failed']);
+  $session = newDeviceSession($pdo, $user, mb_substr(trim((string)($in['device'] ?? 'Browser')), 0, 40));
+  $pdo->prepare('UPDATE k_qr SET kal_id = ?, session = ?, sealed = ? WHERE pid = ? AND session IS NULL')
+      ->execute([$me['kal_id'], json_encode($session), json_encode([
+        'iv' => (string)$sealed['iv'], 'blob' => (string)$sealed['blob'],
+        'pub' => ['x' => (string)($sealed['pub']['x'] ?? ''), 'y' => (string)($sealed['pub']['y'] ?? '')]]), $r['pid']]);
+  out(true, ['linked' => true]);
+}
+
 /* Logging out on a phone: it stops getting this account's notifications. */
 function fcmUnregister(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
