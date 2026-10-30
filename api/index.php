@@ -1209,7 +1209,18 @@ function reqSend(PDO $pdo, array $in): void {
     out(true, ['already'=>$ex['status']]);
   }
   $pdo->prepare("INSERT INTO k_contacts (a,b,status,created_at) VALUES (?,?,'pending',NOW())")->execute([$me['kal_id'],$to]);
-  out(true, ['sent' => true]);
+  answerNow(['sent' => true]);
+  // ring their phone: "@asha wants to connect"
+  sendPush($pdo, $to, displayName($pdo, $me['kal_id']), 'wants to connect with you', $me['kal_id'], 'request');
+  exit;
+}
+/* "Asha (@asha7)" for notifications */
+function displayName(PDO $pdo, string $kal): string {
+  $u = $pdo->prepare('SELECT name, username FROM k_users WHERE kal_id = ?'); $u->execute([$kal]);
+  $r = $u->fetch();
+  if (!$r) return 'Someone';
+  $nm = trim((string)$r['name']);
+  return $nm !== '' ? $nm . ($r['username'] ? ' (@' . $r['username'] . ')' : '') : '@' . $r['username'];
 }
 function reqList(PDO $pdo, array $in): void {
   $me = auth($pdo, $in);
@@ -1225,7 +1236,13 @@ function reqAct(PDO $pdo, array $in): void {
   $from = strtoupper(trim((string)($in['from'] ?? '')));
   $act = ($in['act'] ?? '') === 'accept' ? 'accept' : 'reject';
   if ($act === 'accept') {
-    $pdo->prepare("UPDATE k_contacts SET status='accepted' WHERE a=? AND b=?")->execute([$from,$me['kal_id']]);
+    $up = $pdo->prepare("UPDATE k_contacts SET status='accepted' WHERE a=? AND b=? AND status='pending'");
+    $up->execute([$from,$me['kal_id']]);
+    if ($up->rowCount() > 0) {
+      answerNow(['ok'=>true, 'act'=>$act]);
+      sendPush($pdo, $from, displayName($pdo, $me['kal_id']), 'accepted your request — say hi!', $me['kal_id'], 'request');
+      exit;
+    }
   } else {
     $pdo->prepare("DELETE FROM k_contacts WHERE a=? AND b=?")->execute([$from,$me['kal_id']]);
   }
@@ -1318,9 +1335,9 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
       $st = $pdo->prepare("SELECT token, '' AS caps FROM k_fcm WHERE kal_id=?"); $st->execute([$toKal]);
     }
     $rows = $st->fetchAll();
-    if (!$rows) return $report ? ['ok'=>false,'why'=>'no_device_registered'] : null;
+    if (!$rows) { pushLog($pdo, $toKal, $type, 0, 'no phone registered for notifications', ''); return $report ? ['ok'=>false,'why'=>'no_device_registered'] : null; }
     $access = fcmAccessToken();
-    if (!$access) return $report ? ['ok'=>false,'why'=>'google_auth_failed'] : null;
+    if (!$access) { pushLog($pdo, $toKal, $type, 0, 'server could not sign in to Google (fcm key)', ''); return $report ? ['ok'=>false,'why'=>'google_auth_failed'] : null; }
     $project = defined('FCM_PROJECT_ID') ? FCM_PROJECT_ID : ($sa['project_id'] ?? '');
     if ($project === '') return $report ? ['ok'=>false,'why'=>'no_project_id'] : null;
     $url = 'https://fcm.googleapis.com/v1/projects/'.$project.'/messages:send';
@@ -1379,6 +1396,7 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
       }
       $results[] = ['http'=>$code, 'error'=>$err ?: null,
                     'body'=>$code >= 300 ? substr((string)$resp, 0, 300) : null];
+      pushLog($pdo, $toKal, $type, $code, $err ?: ($code >= 300 ? substr((string)$resp, 0, 200) : ''), substr($t, -8));
     }
     if ($report) {
       return ['ok' => !empty($results) && ($results[0]['http'] ?? 0) === 200,
@@ -1388,6 +1406,18 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
     if ($report) return ['ok'=>false,'why'=>'exception','detail'=>$e->getMessage()];
   }
   return $report ? ['ok'=>false,'why'=>'no_attempts'] : null;
+}
+
+/* Every push and what Google answered, for the admin panel (Notifications). */
+function pushLog(PDO $pdo, string $kal, string $type, int $code, string $err, string $tok): void {
+  try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS k_push_log (id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      kal_id VARCHAR(20), type VARCHAR(20), http INT, err VARCHAR(200), tok VARCHAR(8), created_at DATETIME,
+      KEY k (kal_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $pdo->prepare('INSERT INTO k_push_log (kal_id, type, http, err, tok, created_at) VALUES (?,?,?,?,?,NOW())')
+        ->execute([$kal, $type, $code, $err, $tok]);
+    if (random_int(1, 100) === 1) $pdo->exec("DELETE FROM k_push_log WHERE created_at < (NOW() - INTERVAL 3 DAY)");
+  } catch (Throwable $e) {}
 }
 
 /* Tell my other devices something happened here: a chat was read (clear its
