@@ -1349,12 +1349,49 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
       $data = ['type'=>$type,'sender'=>$fromKal,'title'=>$title,'body'=>$body,
                'click_action'=>'FLUTTER_NOTIFICATION_CLICK'];
       foreach ($extra as $k => $v) $data[$k] = (string)$v;
-      if (str_contains((string)$row['caps'], 'data')) {
-        // Current app: a silent wake-up. The phone fetches the message,
-        // decrypts it and shows the real text; calls ring full-screen.
+      $caps = (string)$row['caps'];
+      // things the person sees (a message, a call, a request, a like) go out
+      // urgent; quiet syncs ("read on my other phone", "call answered
+      // elsewhere") don't - urgent pushes that show nothing make Google
+      // slow down all of the app's pushes
+      $visible = in_array($type, ['message', 'call', 'request', 'status_like'], true);
+      $prio = $visible ? 'high' : 'normal';
+      if (str_contains($caps, 'notif') && $visible) {
+        // App 1.3.2+: the notification travels with the push, so Android
+        // shows it at once - screen off, app asleep or not. When the app
+        // wakes it replaces it (same tag) with the real text or the
+        // full-screen ringing.
+        $tag = match ($type) {
+          'call'        => 'bccall:' . $fromKal,
+          'request'     => 'bc:requests',
+          'status_like' => 'bc:status',
+          default       => 'bc:' . (string)($extra['group'] ?? $fromKal),
+        };
         $msg = ['message'=>[
           'token'=>$t,
-          'android'=>['priority'=>'high','ttl'=> ($isCall ? '45s' : '86400s')],
+          'android'=>[
+            'priority'=>'high',
+            'ttl'=> ($type === 'call' ? '45s' : '86400s'),
+            'notification'=>[
+              'title'=>$title !== '' ? $title : 'BharatApp Chat',
+              'body'=>$body !== '' ? $body : 'New message',
+              'channel_id'=> ($type === 'call' ? 'bharatapp_calls_v2' : 'bharatapp_messages'),
+              'tag'=>$tag,
+              'icon'=>'ic_stat_notify',
+              'color'=>'#06BA70',
+              'notification_priority'=> ($type === 'call' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH'),
+              'visibility'=>'PUBLIC',
+              'default_sound'=>false,
+            ],
+          ],
+          'data'=>$data,
+        ]];
+      } elseif (str_contains($caps, 'data')) {
+        // A silent wake-up. The phone fetches the message, decrypts it and
+        // shows the real text; calls ring full-screen.
+        $msg = ['message'=>[
+          'token'=>$t,
+          'android'=>['priority'=>$prio,'ttl'=> ($isCall ? '45s' : '86400s')],
           'data'=>$data,
         ]];
       } else {
@@ -2228,6 +2265,7 @@ function out(bool $ok, array $data = []): void {
 function answerNow(array $data): void {
   $body = json_encode(['ok' => true] + $data);
   ignore_user_abort(true);
+  @set_time_limit(60);   // the pushes after the answer must get to finish
   if (!headers_sent()) {
     header('Content-Length: ' . strlen($body));
     header('Connection: close');
