@@ -1413,14 +1413,29 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
           'data'=>$data,
         ]];
       }
-      $ch = curl_init($url);
-      curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>6,
-        CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$access,'Content-Type: application/json'],
-        CURLOPT_POSTFIELDS=>json_encode($msg)]);
-      $resp = curl_exec($ch);
-      $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-      $err  = curl_error($ch);
-      curl_close($ch);
+      $post = function (array $m) use ($url, $access) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>6,
+          CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$access,'Content-Type: application/json'],
+          CURLOPT_POSTFIELDS=>json_encode($m)]);
+        $resp = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+        return [$resp, (int)$code, $err];
+      };
+      [$resp, $code, $err] = $post($msg);
+      // Google refused the push with a ready-made notification: never leave
+      // the phone with nothing - send the plain wake-up instead, and keep
+      // Google's reason in the log (admin -> Notifications)
+      if ($code === 400 && isset($msg['message']['android']['notification'])) {
+        pushLog($pdo, $toKal, $type . ' (notif)', $code, substr((string)$resp, 0, 200), substr($t, -8));
+        [$resp, $code, $err] = $post(['message'=>[
+          'token'=>$t,
+          'android'=>['priority'=>'high','ttl'=> ($isCall ? '45s' : '86400s')],
+          'data'=>$data,
+        ]]);
+      }
 
       // Only 404 (UNREGISTERED) means the token itself is dead. A 400 means
       // the payload was malformed — deleting the token then just unregisters
