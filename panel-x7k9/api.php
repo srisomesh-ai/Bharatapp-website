@@ -10,6 +10,7 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 require __DIR__ . '/../api/config.php';
+require __DIR__ . '/../api/queue_tidy.php';
 
 /* Admin credentials — override in config.local.php on the server via ADMIN_USER / ADMIN_PASS_HASH.
    Default password is 'Kalisi@Admin2026' (CHANGE IT). Hash = sha256 of the password. */
@@ -44,6 +45,8 @@ try {
     case 'list_groups':  listGroups($pdo); break;
     case 'rtc':          adminRtc($pdo); break;
     case 'push_log':     pushLogList($pdo); break;
+    case 'queue_logins': out(true, ['rows' => queueLogins($pdo, 86400)]); break;
+    case 'queue_clear':  out(true, ['removed' => clearStuckCopies($pdo, 86400)]); break;
     case 'trace':        traceForward($pdo, $in); break;
     case 'wipe_all':     wipeAll($pdo); break;
     case 'logout':       $pdo->prepare('DELETE FROM k_admin_sessions WHERE token = ?')->execute([$in['token'] ?? '']); out(true, ['bye'=>1]); break;
@@ -99,10 +102,7 @@ function adminStats(PDO $pdo): void {
         COUNT(DISTINCT to_id) AS people
       FROM k_queue")->fetch();
   $idle = 0;
-  try {
-    $idle = (int)$pdo->query("SELECT COUNT(*) c FROM k_queue q JOIN k_devices d ON d.id = q.dev
-                               WHERE d.last_seen < (NOW() - INTERVAL 7 DAY)")->fetch()['c'];
-  } catch (Throwable $e) {}
+  try { foreach (queueLogins($pdo, 86400) as $l) $idle += $l['stuck']; } catch (Throwable $e) {}
   $active = (int)$pdo->query("SELECT COUNT(*) c FROM k_users WHERE last_seen > (NOW() - INTERVAL 7 DAY)")->fetch()['c'];
   $disabled = (int)$pdo->query("SELECT COUNT(*) c FROM k_users WHERE disabled = 1")->fetch()['c'];
   $queue = (int)$pdo->query("SELECT COUNT(*) c FROM k_queue")->fetch()['c'];
@@ -285,7 +285,7 @@ function pushLogList(PDO $pdo): void {
     $rows = $pdo->query("SELECT p.created_at, p.type, p.http, p.err, p.tok, u.username, u.name
                          FROM k_push_log p LEFT JOIN k_users u ON u.kal_id = p.kal_id
                          ORDER BY p.id DESC LIMIT 200")->fetchAll();
-    $sum = $pdo->query("SELECT http, COUNT(*) AS n FROM k_push_log WHERE created_at > (NOW() - INTERVAL 1 DAY)
+    $sum = $pdo->query("SELECT http, COUNT(*) AS n FROM k_push_log WHERE created_at > (NOW() - INTERVAL 1 DAY) AND type NOT IN ('register','app_error')
                         GROUP BY http ORDER BY n DESC")->fetchAll();
     $phones = (int)$pdo->query("SELECT COUNT(DISTINCT kal_id) FROM k_fcm")->fetchColumn();
   } catch (Throwable $e) { $rows = []; $sum = []; $phones = 0; }
