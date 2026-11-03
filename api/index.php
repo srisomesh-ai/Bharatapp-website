@@ -2294,21 +2294,28 @@ function migrate(PDO $pdo): void {
 }
 
 function out(bool $ok, array $data = []): void {
+  unset($GLOBALS['__answer']);   // this answer replaces one waiting to go out
   echo json_encode(['ok' => $ok] + $data);
   exit;
 }
-/* Give the app its answer now and carry on (notifications) after, so a
-   send never waits for Google. */
+/* The app's answer for a send: it goes out when the script ends, after
+   the notifications (see below). */
 function answerNow(array $data): void {
-  $body = json_encode(['ok' => true] + $data);
-  ignore_user_abort(true);
-  @set_time_limit(60);   // the pushes after the answer must get to finish
-  if (!headers_sent()) {
-    header('Content-Length: ' . strlen($body));
-    header('Connection: close');
-  }
-  echo $body;
-  if (function_exists('litespeed_finish_request')) litespeed_finish_request();
-  elseif (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
-  else { while (ob_get_level() > 0) @ob_end_flush(); flush(); }
+  // The answer goes out when the script ends - AFTER the notifications.
+  // Answering first and pushing afterwards did not work on the live server:
+  // its web server (LiteSpeed) stops the script once the answer is sent, so
+  // no push ever reached Google (admin -> Notifications stayed empty).
+  // A push takes a fraction of a second; the sender waits that much longer.
+  static $armed = false;
+  $GLOBALS['__answer'] = json_encode(['ok' => true] + $data);
+  @set_time_limit(60);
+  if ($armed) return;
+  $armed = true;
+  register_shutdown_function(function () {
+    if (!isset($GLOBALS['__answer'])) return;
+    $body = $GLOBALS['__answer'];
+    unset($GLOBALS['__answer']);
+    while (ob_get_level() > 0) @ob_end_clean();
+    echo $body;
+  });
 }
