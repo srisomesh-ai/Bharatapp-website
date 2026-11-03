@@ -12,6 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 set_error_handler(function($no,$str){ throw new ErrorException($str,0,$no); });
 require __DIR__ . '/config.php';
+require __DIR__ . '/queue_tidy.php';
 
 try {
   $pdo = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS,
@@ -59,6 +60,7 @@ try {
     case 'contacts_state': contactsState($pdo, $in); break;
     case 'presence':      presence($pdo, $in); break;
     case 'fcm_register':  fcmRegister($pdo, $in); break;
+    case 'push_diag':     pushDiag($pdo, $in); break;
     case 'fcm_unregister': fcmUnregister($pdo, $in); break;
     case 'fetch_ack':     fetchAck($pdo, $in); break;
     case 'qr_start':      qrStart($pdo, $in); break;
@@ -262,6 +264,10 @@ function fetchMsgs(PDO $pdo, array $in): void {
   // undelivered copies are kept at most 30 days (Privacy Policy); tidy now and then
   if (random_int(1, 200) === 1) {
     try { $pdo->exec("DELETE FROM k_queue WHERE created_at < (NOW() - INTERVAL 30 DAY)"); } catch (Throwable $e) {}
+  }
+  // copies for a login unused for 7 days whose person reads on another one
+  if (random_int(1, 100) === 1) {
+    try { clearStuckCopies($pdo, 7 * 86400); } catch (Throwable $e) {}
   }
   if ($me['dev'] !== '') deviceIds($pdo, $me['kal_id']);   // drops copies no main login will ever fetch
   $out = ['messages' => [], 'receipts' => []];
@@ -1272,7 +1278,22 @@ function fcmRegister(PDO $pdo, array $in): void {
   $caps = preg_replace('/[^a-z,]/', '', strtolower((string)($in['caps'] ?? '')));
   $pdo->prepare("INSERT INTO k_fcm (kal_id,token,caps,updated_at) VALUES (?,?,?,NOW()) ON DUPLICATE KEY UPDATE caps=VALUES(caps), updated_at=NOW()")
       ->execute([$me['kal_id'],$tok,$caps]);
+  // shown in admin -> Notifications: this phone can get notifications now
+  // (once a day per phone, the app registers every time it opens)
+  $seen = $pdo->prepare("SELECT 1 FROM k_push_log WHERE kal_id = ? AND type = 'register' AND tok = ? AND created_at > (NOW() - INTERVAL 1 DAY) LIMIT 1");
+  try { $seen->execute([$me['kal_id'], substr($tok, -8)]); $old = (bool)$seen->fetch(); } catch (Throwable $e) { $old = false; }
+  if (!$old) pushLog($pdo, $me['kal_id'], 'register', 200, 'phone registered for notifications', substr($tok, -8));
   out(true,['registered'=>true]);
+}
+
+/* The app could not get or register its notification address: say why in
+   admin -> Notifications (no message content, just the error). */
+function pushDiag(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $err = mb_substr(preg_replace('/\s+/', ' ', (string)($in['error'] ?? '')), 0, 190);
+  if ($err === '' || rateLimited($pdo, 'pdiag:' . $me['kal_id'], 20, 3600)) out(true, []);
+  pushLog($pdo, $me['kal_id'], 'app_error', 0, $err, '');
+  out(true, []);
 }
 
 /* Send an FCM push to a recipient (best-effort; silent on failure).
@@ -1445,6 +1466,7 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
         try {
           $pdo->prepare("DELETE FROM k_fcm WHERE token=?")->execute([$t]);
         } catch (Throwable $e) {}
+        $err = 'old phone address removed (app reinstalled or signed out) - it registers again when the app opens';
       }
       $results[] = ['http'=>$code, 'error'=>$err ?: null,
                     'body'=>$code >= 300 ? substr((string)$resp, 0, 300) : null];

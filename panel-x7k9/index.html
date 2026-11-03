@@ -352,7 +352,20 @@ function renderStats(st){
   const q=st.queue;
   $('qbox').style.display=q?'block':'none';
   if(q)$('qbox').innerHTML=`<b>Waiting to deliver: ${n(st.queued)}</b> — encrypted copies (messages, read ticks and call signals) held for a phone or browser that hasn't come online yet. Each signed-in device gets its own copy, and copies are deleted the moment they're delivered, or after 30 days.
-    <div class="qrow"><span>Last hour: <b>${n(q.hour)}</b></span><span>1 h – 7 days: <b>${n(q.week)}</b></span><span>Older than 7 days: <b>${n(q.older)}</b></span><span>For <b>${n(q.people)}</b> people</span><span>For devices idle 7+ days: <b>${n(q.idle_devices)}</b></span></div>`;
+    <div class="qrow"><span>Last hour: <b>${n(q.hour)}</b></span><span>1 h – 7 days: <b>${n(q.week)}</b></span><span>Older than 7 days: <b>${n(q.older)}</b></span><span>For <b>${n(q.people)}</b> people</span><span>Stuck: <b>${n(q.idle_devices)}</b></span></div>
+    <div class="qrow" style="margin-top:12px"><button class="btn sm" onclick="qClear()">🧹 Clear stuck messages</button><button class="btn sm ghost" onclick="qWho()">See where they wait</button></div>
+    <div style="margin-top:8px;color:#7A6E62">Stuck = waiting for a login not used for a day (an old phone login or a closed web panel) while the person already read their messages on another login. Clearing them loses nothing.</div>
+    <div id="qwho"></div>`;
+}
+async function qClear(){
+  try{ const r=await call('queue_clear',{}); toast(r.removed+' stuck copies removed'); loadStatsOnly(); }catch(e){ toast(e.message); }
+}
+async function qWho(){
+  try{
+    const rows=(await call('queue_logins',{})).rows, n=v=>Number(v||0).toLocaleString('en-IN');
+    const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    $('qwho').innerHTML=rows.length?`<div style="overflow-x:auto;margin-top:10px"><table><tr><th>Person</th><th>Login</th><th>Last used</th><th>Waiting</th><th>Stuck</th></tr>${rows.map(r=>`<tr><td>${esc(r.name||'')} <span style="color:#7A6E62">@${esc(r.username||r.to_id)}</span></td><td>${esc(r.login)}</td><td>${esc(r.last_used||'never')}</td><td>${n(r.waiting)}</td><td>${n(r.stuck)}</td></tr>`).join('')}</table></div>`:'<div style="margin-top:8px">Nothing waiting.</div>';
+  }catch(e){ toast(e.message); }
 }
 function seen(u){
   const a=u.seen_ago==null?null:Number(u.seen_ago);
@@ -377,7 +390,7 @@ async function loadPush(){
     const ok=r.summary.find(x=>+x.http===200)?.n||0, all=r.summary.reduce((a,x)=>a+(+x.n),0);
     const label=h=>+h===200?'<span class="pill on">Delivered to Google</span>':+h===0?'<span class="pill off">Not sent</span>':'<span class="pill off">Refused ('+esc(h)+')</span>';
     $('push-sum').innerHTML=`<b>${r.phones}</b> people have a phone registered for notifications · last 24 h: <b>${ok}</b> of <b>${all}</b> notifications accepted by Google`;
-    $('push-rows').innerHTML=r.rows.length?r.rows.map(x=>`<tr><td class="muted">${esc(x.created_at)}</td><td>${x.username?'@'+esc(x.username):'<span class="muted">?</span>'}</td><td>${esc(x.type)}</td><td>${label(x.http)}<div class="muted" style="font-size:12px">${esc(x.err||'')}</div></td></tr>`).join('')
+    $('push-rows').innerHTML=r.rows.length?r.rows.map(x=>`<tr><td class="muted">${esc(x.created_at)}</td><td>${x.username?'@'+esc(x.username):'<span class="muted">?</span>'}</td><td>${esc(x.type)}</td><td>${x.type==='register'?'<span class="pill on">Phone registered</span>':x.type==='app_error'?'<span class="pill off">Problem on the phone</span>':label(x.http)}<div class="muted" style="font-size:12px">${esc(x.err||'')}</div></td></tr>`).join('')
       :'<tr><td colspan="4" class="muted">No notifications sent yet.</td></tr>';
   }catch(e){ toast(e.message); }
 }
