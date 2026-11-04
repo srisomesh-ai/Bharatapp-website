@@ -10,7 +10,13 @@ header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-set_error_handler(function($no,$str){ throw new ErrorException($str,0,$no); });
+// Warnings become errors - except where the code says "@" (expected, e.g. a
+// cache file that isn't there yet). Without this check, "@" was ignored and
+// sending notifications failed silently (Google's sign-in cache).
+set_error_handler(function($no,$str){
+  if (!(error_reporting() & $no)) return false;
+  throw new ErrorException($str,0,$no);
+});
 require __DIR__ . '/config.php';
 require __DIR__ . '/queue_tidy.php';
 
@@ -1477,6 +1483,8 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
               'attempts' => $results];
     }
   } catch (Throwable $e) {
+    // never silent again: show it in admin -> Notifications
+    pushLog($pdo, $toKal, $type, 0, 'server error: ' . substr($e->getMessage(), 0, 170), '');
     if ($report) return ['ok'=>false,'why'=>'exception','detail'=>$e->getMessage()];
   }
   return $report ? ['ok'=>false,'why'=>'no_attempts'] : null;
@@ -1540,7 +1548,7 @@ function fcmAccessToken(): ?string {
   // Google's token lasts an hour: reuse it (asking for a new one on every
   // message made each send wait for an extra round trip to Google)
   $cache = sys_get_temp_dir() . '/bharatapp_fcm_' . md5((string)$sa['client_email']) . '.json';
-  $c = @json_decode((string)@file_get_contents($cache), true);
+  $c = is_readable($cache) ? @json_decode((string)@file_get_contents($cache), true) : null;
   if (is_array($c) && ($c['exp'] ?? 0) > time() + 60 && !empty($c['tok'])) return $mem = $c['tok'];
   $now = time();
   $header = rtrim(strtr(base64_encode(json_encode(['alg'=>'RS256','typ'=>'JWT'])), '+/', '-_'), '=');
