@@ -1381,15 +1381,17 @@ function sendPush(PDO $pdo, string $toKal, string $title, string $body, string $
       // urgent; quiet syncs ("read on my other phone", "call answered
       // elsewhere") don't - urgent pushes that show nothing make Google
       // slow down all of the app's pushes
-      $visible = in_array($type, ['message', 'call', 'request', 'status_like'], true);
+      $visible = in_array($type, ['message', 'call', 'call_end', 'request', 'status_like'], true);
       $prio = $visible ? 'high' : 'normal';
       if (str_contains($caps, 'notif') && $visible) {
         // App 1.3.2+: the notification travels with the push, so Android
         // shows it at once - screen off, app asleep or not. When the app
         // wakes it replaces it (same tag) with the real text or the
         // full-screen ringing.
+        // call_end: "Missed voice call" takes the place of "Incoming voice
+        // call" (same tag) - even when the app can't run to remove it
         $tag = match ($type) {
-          'call'        => 'bccall:' . $fromKal,
+          'call', 'call_end' => 'bccall:' . $fromKal,
           'request'     => 'bc:requests',
           'status_like' => 'bc:status',
           default       => 'bc:' . (string)($extra['group'] ?? $fromKal),
