@@ -2085,10 +2085,19 @@ function groupSend(PDO $pdo, array $in): void {
   $blocked = $pdo->prepare('SELECT blocker FROM k_blocks WHERE blocked = ?');
   $blocked->execute([$me['kal_id']]);
   $blockedBy = array_column($blocked->fetchAll(), 'blocker');
+  // "seen" / "delivered" notes go to one member only (the message's
+  // sender), quietly - no notification
+  $only = strtoupper(trim((string)($in['to'] ?? '')));
+  $quiet = ($in['push'] ?? '') === 'none';
+  if ($only !== '') {
+    if (!in_array($only, $members, true)) out(false, ['error' => 'not_a_member']);
+    $members = [$me['kal_id'], $only];
+  }
   foreach ($members as $mm) {
     if ($mm === $me['kal_id'] || in_array($mm, $blockedBy, true)) continue;
     deliver($pdo, $mm, $me['kal_id'], $cid, $iv, $blob);
   }
+  if ($only !== '' || $quiet) out(true, ['sent' => true, 'gid' => $gid]);
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $gid, $cid, $iv, $blob);
   logForward($pdo, $in, $me['kal_id']);
   answerNow(['sent' => true, 'gid' => $gid]);
