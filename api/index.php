@@ -65,6 +65,7 @@ try {
     case 'req_act':       reqAct($pdo, $in); break;
     case 'contacts_state': contactsState($pdo, $in); break;
     case 'presence':      presence($pdo, $in); break;
+    case 'online_list':   onlineList($pdo, $in); break;
     case 'fcm_register':  fcmRegister($pdo, $in); break;
     case 'push_diag':     pushDiag($pdo, $in); break;
     case 'fcm_unregister': fcmUnregister($pdo, $in); break;
@@ -1585,6 +1586,27 @@ function presence(PDO $pdo, array $in): void {
   if (!$u) out(false, ['error'=>'not_found']);
   if (!allowedBy($pdo, $kid, 'last_seen', $me['kal_id'])) out(true, ['hidden' => true]);
   out(true, ['last_seen' => strtotime($u['last_seen'])*1000]);
+}
+
+/* Which of these people are online right now (for the chat list: colour
+   photo + green bubble when online, black and white when not). Respects
+   each person's "last seen" privacy. */
+function onlineList(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $ids = array_values(array_unique(array_filter(array_map(
+    fn($x) => strtoupper(trim((string)$x)), (array)($in['ids'] ?? [])),
+    fn($x) => preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $x))));
+  $ids = array_slice($ids, 0, 300);
+  if (!$ids) out(true, ['online' => []]);
+  $q = implode(',', array_fill(0, count($ids), '?'));
+  // the app checks in every few seconds while open, once a minute behind
+  $st = $pdo->prepare("SELECT kal_id FROM k_users WHERE kal_id IN ($q) AND last_seen > (NOW() - INTERVAL 75 SECOND)");
+  $st->execute($ids);
+  $on = [];
+  foreach (array_column($st->fetchAll(), 'kal_id') as $k) {
+    if (allowedBy($pdo, $k, 'last_seen', $me['kal_id'])) $on[] = $k;
+  }
+  out(true, ['online' => $on]);
 }
 
 /* ---------------- privacy ----------------

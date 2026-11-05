@@ -43,6 +43,8 @@ try {
     case 'slide_add':    slideAdd($in); break;
     case 'slide_del':    slideDel($in); break;
     case 'list_groups':  listGroups($pdo); break;
+    case 'group_delete': $pdo->prepare('DELETE FROM k_groups WHERE gid = ?')->execute([(string)($in['gid'] ?? '')]);
+                         out(true, ['deleted' => true]); break;
     case 'rtc':          adminRtc($pdo); break;
     case 'push_log':     pushLogList($pdo); break;
     case 'queue_logins': out(true, ['rows' => queueLogins($pdo, 86400)]); break;

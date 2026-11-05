@@ -144,8 +144,8 @@ tbody tr:hover td{background:#FFFBF4}
 
     <div id="view-groups" style="display:none">
       <table>
-        <thead><tr><th>Group</th><th class="hide-sm">GID</th><th>Members</th><th class="hide-sm">Created</th></tr></thead>
-        <tbody id="groups-body"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>Group</th><th class="hide-sm">GID</th><th>Members</th><th class="hide-sm">Created</th><th></th></tr></thead>
+        <tbody id="groups-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
 
@@ -266,10 +266,17 @@ function renderUsers(){
     </tr>`).join('');
 }
 function renderGroups(){
-  if(!GROUPS.length){$('groups-body').innerHTML='<tr><td colspan="4" class="empty">No groups yet</td></tr>';return;}
-  $('groups-body').innerHTML=GROUPS.map(g=>`
+  if(!GROUPS.length){$('groups-body').innerHTML='<tr><td colspan="5" class="empty">No groups yet</td></tr>';return;}
+  $('groups-body').innerHTML=GROUPS.map((g,i)=>`
     <tr><td class="uname">${esc(g.name)}</td><td class="hide-sm uid">${esc(g.gid)}</td>
-    <td>${g.members}</td><td class="hide-sm muted">${fmt(g.created_at)}</td></tr>`).join('');
+    <td>${g.members}</td><td class="hide-sm muted">${fmt(g.created_at)}</td>
+    <td><button class="btn sm red" onclick="delGroup(${i})">Delete</button></td></tr>`).join('');
+}
+async function delGroup(i){
+  const g0=GROUPS[i]; if(!g0)return; const gid=g0.gid, name=g0.name;
+  if(!confirm('Delete the group "'+name+'" for everyone?\n\nMembers can no longer send to it. Cannot be undone.'))return;
+  try{ await call('group_delete',{gid}); GROUPS=GROUPS.filter(g=>g.gid!==gid); renderGroups(); toast('Group deleted'); }
+  catch(e){ toast(e.message); }
 }
 async function setDisabled(kid,val){
   try{ await call('set_disabled',{kal_id:kid,disabled:val});
