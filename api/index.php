@@ -1599,8 +1599,9 @@ function onlineList(PDO $pdo, array $in): void {
   $ids = array_slice($ids, 0, 300);
   if (!$ids) out(true, ['online' => []]);
   $q = implode(',', array_fill(0, count($ids), '?'));
-  // the app checks in every few seconds while open, once a minute behind
-  $st = $pdo->prepare("SELECT kal_id FROM k_users WHERE kal_id IN ($q) AND last_seen > (NOW() - INTERVAL 75 SECOND)");
+  // the app checks in every few seconds while open, about once a minute in
+  // the background (a phone that can get messages counts as reachable)
+  $st = $pdo->prepare("SELECT kal_id FROM k_users WHERE kal_id IN ($q) AND last_seen > (NOW() - INTERVAL 120 SECOND)");
   $st->execute($ids);
   $on = [];
   foreach (array_column($st->fetchAll(), 'kal_id') as $k) {
