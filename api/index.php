@@ -66,6 +66,7 @@ try {
     case 'contacts_state': contactsState($pdo, $in); break;
     case 'presence':      presence($pdo, $in); break;
     case 'online_list':   onlineList($pdo, $in); break;
+    case 'fwd_recall':    fwdRecall($pdo, $in); break;
     case 'fcm_register':  fcmRegister($pdo, $in); break;
     case 'push_diag':     pushDiag($pdo, $in); break;
     case 'fcm_unregister': fcmUnregister($pdo, $in); break;
@@ -215,7 +216,7 @@ function send(PDO $pdo, array $in): void {
   }
   deliver($pdo, $to, $me['kal_id'], $cid, $iv, $blob);
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $to, $cid, $iv, $blob);
-  logForward($pdo, $in, $me['kal_id']);
+  logForward($pdo, $in, $me['kal_id'], $to);
   answerNow(['queued' => true]);
   if ($to === supportId($pdo) && ($in['push'] ?? 'message') === 'message') emailSupportNotice($pdo, $me['kal_id']);
   // best-effort push (content stays private — generic text only)
@@ -340,11 +341,66 @@ function fetchMsgs(PDO $pdo, array $in): void {
     $out['receipts'][] = ['client_id' => $r['client_id'], 'receipt' => $r['receipt']];
   }
 
+  // forwarded messages taken back by someone before me in the chain
+  try {
+    $st = $pdo->prepare('SELECT id, hash FROM k_recall WHERE kal_id = ? AND id > ? ORDER BY id LIMIT 100');
+    $st->execute([$me['kal_id'], (int)($in['recall_after'] ?? 0)]);
+    foreach ($st->fetchAll() as $r) $out['recalls'][] = ['id' => (int)$r['id'], 'hash' => $r['hash']];
+  } catch (Throwable $e) {}
+
   $pdo->prepare('UPDATE k_users SET last_seen = NOW() WHERE kal_id = ?')->execute([$me['kal_id']]);
   if ($me['dev'] !== '') {
     $pdo->prepare('UPDATE k_devices SET last_seen = NOW() WHERE id = ?')->execute([$me['dev']]);
   }
   out(true, $out);
+}
+
+/* "Delete for everyone + all forwards": every forwarded copy of this message
+   AFTER me in the chain (whom I forwarded it to, whom they forwarded it to,
+   ... and, for the writer, whoever forwarded what they got from me) is
+   removed on their phones - now, or when they next come online. Never the
+   copies before me. Only the fingerprint travels; the server can't read it. */
+function fwdRecall(PDO $pdo, array $in): void {
+  $me = auth($pdo, $in);
+  $hash = strtolower((string)($in['hash'] ?? ''));
+  if (!preg_match('/^[a-f0-9]{64}$/', $hash)) out(false, ['error' => 'bad_input']);
+  if (rateLimited($pdo, 'recall:' . substr($me['kal_id'], 4), 30, 3600)) out(false, ['error' => 'too_many']);
+  $pdo->exec("CREATE TABLE IF NOT EXISTS k_recall (id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    kal_id VARCHAR(14) NOT NULL, hash CHAR(64) NOT NULL, by_kal VARCHAR(14) NOT NULL, created_at DATETIME NOT NULL,
+    KEY k (kal_id, id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  try { $pdo->exec("ALTER TABLE k_fwd_log ADD COLUMN to_id VARCHAR(40) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+  $st = $pdo->prepare('SELECT kal_id, received_from, to_id FROM k_fwd_log WHERE hash = ?');
+  $st->execute([$hash]);
+  $rows = $st->fetchAll();
+  $members = function (string $gid) use ($pdo): array {
+    $g = $pdo->prepare('SELECT members FROM k_groups WHERE gid = ?'); $g->execute([$gid]);
+    return json_decode((string)$g->fetchColumn(), true) ?: [];
+  };
+  $seen = [$me['kal_id'] => true];
+  $queue = [$me['kal_id']];
+  $targets = [];
+  while ($queue) {
+    $u = array_shift($queue);
+    $next = [];
+    foreach ($rows as $r) {
+      // u forwarded it: everyone u sent it to
+      if ($r['kal_id'] === $u && $r['to_id'] !== '') {
+        foreach (str_starts_with($r['to_id'], 'KAL-') ? [$r['to_id']] : $members($r['to_id']) as $k) $next[] = $k;
+      }
+      // someone forwarded what they got from u
+      if ($r['received_from'] === $u) $next[] = $r['kal_id'];
+    }
+    foreach ($next as $k) {
+      if (!is_string($k) || isset($seen[$k])) continue;
+      $seen[$k] = true;
+      $targets[] = $k;
+      $queue[] = $k;
+    }
+  }
+  $ins = $pdo->prepare('INSERT INTO k_recall (kal_id, hash, by_kal, created_at) VALUES (?,?,?,NOW())');
+  foreach ($targets as $k) $ins->execute([$k, $hash, $me['kal_id']]);
+  if (random_int(1, 50) === 1) $pdo->exec("DELETE FROM k_recall WHERE created_at < (NOW() - INTERVAL 60 DAY)");
+  out(true, ['removed_for' => count($targets)]);
 }
 
 function contactsProfiles(PDO $pdo, array $in): void {
@@ -1079,14 +1135,16 @@ function emailInUse(PDO $pdo, string $email): bool {
    non-forwarded messages are never fingerprinted. On a lawful order the
    admin panel can match a fingerprint to the earliest account that put it
    into circulation. Rows are dropped after FWD_RETENTION_DAYS. */
-function logForward(PDO $pdo, array $in, string $kalId): void {
+function logForward(PDO $pdo, array $in, string $kalId, string $to = ''): void {
   $hash = strtolower((string)($in['fwd_hash'] ?? ''));
   if (!preg_match('/^[a-f0-9]{64}$/', $hash)) return;
   $from = strtoupper(trim((string)($in['fwd_from'] ?? '')));
   if (!preg_match('/^KAL-[A-Z2-9]{4}-[A-Z2-9]{4}$/', $from)) $from = '';
   try {
-    $pdo->prepare('INSERT INTO k_fwd_log (hash, kal_id, received_from, created_at) VALUES (?,?,?,NOW())')
-        ->execute([$hash, $kalId, $from]);
+    // who it went to (a person or a group), so a chain can be recalled
+    try { $pdo->exec("ALTER TABLE k_fwd_log ADD COLUMN to_id VARCHAR(40) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+    $pdo->prepare('INSERT INTO k_fwd_log (hash, kal_id, received_from, to_id, created_at) VALUES (?,?,?,?,NOW())')
+        ->execute([$hash, $kalId, $from, substr($to, 0, 40)]);
     if (random_int(1, 200) === 1) {
       $days = defined('FWD_RETENTION_DAYS') ? (int)FWD_RETENTION_DAYS : 180;
       $pdo->prepare('DELETE FROM k_fwd_log WHERE created_at < (NOW() - INTERVAL ? DAY)')->execute([$days]);
@@ -2122,7 +2180,7 @@ function groupSend(PDO $pdo, array $in): void {
   }
   if ($only !== '' || $quiet) out(true, ['sent' => true, 'gid' => $gid]);
   if (!empty($in['echo'])) echoToMyDevices($pdo, $me, $gid, $cid, $iv, $blob);
-  logForward($pdo, $in, $me['kal_id']);
+  logForward($pdo, $in, $me['kal_id'], $gid);
   answerNow(['sent' => true, 'gid' => $gid]);
   // wake members' phones (content stays private)
   $gn = $pdo->prepare('SELECT name FROM k_groups WHERE gid = ?'); $gn->execute([$gid]);
