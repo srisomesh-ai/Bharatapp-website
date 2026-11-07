@@ -232,10 +232,11 @@ function send(PDO $pdo, array $in): void {
       sendPush($pdo, $to, $gname, 'Missed group call', $me['kal_id'], 'call_end');
     }
     // joins, offers, answers and leaves are silent - the app is awake by then
-  } elseif (str_starts_with($hint, 'call')) {
-    if ($hint === 'call-offer') {
+  } elseif (str_starts_with($hint, 'call') || $hint === 'video-offer') {
+    if ($hint === 'call-offer' || $hint === 'video-offer') {
       if (allowedBy($pdo, $to, 'calls', $me['kal_id']))
-        sendPush($pdo, $to, $sname, 'Incoming voice call', $me['kal_id'], 'call');
+        sendPush($pdo, $to, $sname, $hint === 'video-offer' ? 'Incoming video call' : 'Incoming voice call',
+                 $me['kal_id'], 'call', false, $hint === 'video-offer' ? ['video' => '1'] : []);
     } elseif ($hint === 'call-end') {
       // stop the ringing on a closed phone (and show "missed call")
       sendPush($pdo, $to, $sname, 'Missed voice call', $me['kal_id'], 'call_end');
@@ -1820,10 +1821,12 @@ function statusReact(PDO $pdo, array $in): void {
                  ON DUPLICATE KEY UPDATE emoji=VALUES(emoji), created_at=NOW()")
       ->execute([$sid,$me['kal_id'],$emoji]);
   answerNow(['toggled'=>'on','emoji'=>$emoji]);
-  // tell the owner (once per person per status - changing the emoji doesn't ring again)
+  // tell the owner every time someone likes (or changes their emoji) - at
+  // most once every 2 minutes per person per status, so it can't spam
   $st = $pdo->prepare('SELECT kal_id FROM k_status WHERE id = ?'); $st->execute([$sid]);
   $owner = (string)$st->fetchColumn();
-  if ($owner !== '' && $owner !== $me['kal_id'] && !$ex) {
+  if ($owner !== '' && $owner !== $me['kal_id']
+      && !rateLimited($pdo, 'sl:' . substr(md5($sid . '|' . $me['kal_id']), 0, 16), 1, 120)) {
     $u = $pdo->prepare('SELECT name, username FROM k_users WHERE kal_id = ?'); $u->execute([$me['kal_id']]);
     $who = $u->fetch();
     $nm = $who ? ((string)($who['name'] ?: '@' . $who['username'])) : 'Someone';
