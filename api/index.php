@@ -232,10 +232,11 @@ function send(PDO $pdo, array $in): void {
       sendPush($pdo, $to, $gname, 'Missed group call', $me['kal_id'], 'call_end');
     }
     // joins, offers, answers and leaves are silent - the app is awake by then
-  } elseif (str_starts_with($hint, 'call')) {
-    if ($hint === 'call-offer') {
+  } elseif (str_starts_with($hint, 'call') || $hint === 'video-offer') {
+    if ($hint === 'call-offer' || $hint === 'video-offer') {
       if (allowedBy($pdo, $to, 'calls', $me['kal_id']))
-        sendPush($pdo, $to, $sname, 'Incoming voice call', $me['kal_id'], 'call');
+        sendPush($pdo, $to, $sname, $hint === 'video-offer' ? 'Incoming video call' : 'Incoming voice call',
+                 $me['kal_id'], 'call', false, $hint === 'video-offer' ? ['video' => '1'] : []);
     } elseif ($hint === 'call-end') {
       // stop the ringing on a closed phone (and show "missed call")
       sendPush($pdo, $to, $sname, 'Missed voice call', $me['kal_id'], 'call_end');
